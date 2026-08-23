@@ -1,0 +1,5 @@
+[project]
+name = "jp-amazon-profit-finder"
+version = "0.1.0"
+requires-python = ">=3.11"
+description = "Keepa API 非依存の日本 Amazon 利益商品発見基盤"
