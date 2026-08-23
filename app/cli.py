@@ -16,7 +16,7 @@ def doctor(settings,db):
     except Exception as e: checks.append(("SQLite/DB migration",False,str(e)))
     checks.append(("書き込み権限",os.access(settings.db_path.parent,os.W_OK),str(settings.db_path.parent)))
     checks.append((".env",Path(".env").exists(),"未作成でも mock は実行可能"))
-    groups={"Amazon":["AMAZON_SP_API_REFRESH_TOKEN","AMAZON_SP_API_CLIENT_ID","AMAZON_SP_API_CLIENT_SECRET"],"楽天":["RAKUTEN_APP_ID","RAKUTEN_ACCESS_KEY"],"Yahoo":["YAHOO_CLIENT_ID"],"検索語":["MARKET_SEARCH_QUERIES"],"Google Sheets":["GOOGLE_SHEETS_ID","GOOGLE_SERVICE_ACCOUNT_JSON"]}
+    groups={"Amazon":["AMAZON_SP_API_REFRESH_TOKEN","AMAZON_SP_API_CLIENT_ID","AMAZON_SP_API_CLIENT_SECRET"],"楽天":["RAKUTEN_APP_ID","RAKUTEN_ACCESS_KEY"],"Yahoo":["YAHOO_CLIENT_ID"],"Keepa":["KEEPA_API_KEY"],"検索語":["MARKET_SEARCH_QUERIES"],"Google Sheets":["GOOGLE_SHEETS_ID","GOOGLE_SERVICE_ACCOUNT_JSON"]}
     for name,keys in groups.items(): checks.append((name,all(os.getenv(k) for k in keys),"設定済み" if all(os.getenv(k) for k in keys) else "未設定（mock/CSV利用可）"))
     for name,ok,detail in checks: print(f"[{'OK' if ok else 'WARN'}] {name}: {detail}")
     print("[INFO] Engines: "+", ".join(f"{name}={'enabled' if enabled else 'disabled'}" for name,enabled in settings.engine_flags.items()))

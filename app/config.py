@@ -53,8 +53,11 @@ class Settings:
     today_score_threshold: int
     log_level: str
     engine_flags: FeatureFlags = field(default_factory=FeatureFlags)
+    keepa_enabled: bool = False
+    keepa_cache_ttl_seconds: int = 21600
 
     @classmethod
     def load(cls) -> "Settings":
         _load_dotenv()
-        return cls(Path(os.getenv("APP_DB_PATH", "data/profit_finder.db")), int(os.getenv("MIN_PROFIT_YEN", "500")), float(os.getenv("MIN_PROFIT_MARGIN", "0.15")), int(os.getenv("TODAY_SCORE_THRESHOLD", "85")), os.getenv("APP_LOG_LEVEL", "INFO"), FeatureFlags.load())
+        keepa_key_set=bool(os.getenv("KEEPA_API_KEY"))
+        return cls(Path(os.getenv("APP_DB_PATH", "data/profit_finder.db")), int(os.getenv("MIN_PROFIT_YEN", "500")), float(os.getenv("MIN_PROFIT_MARGIN", "0.15")), int(os.getenv("TODAY_SCORE_THRESHOLD", "85")), os.getenv("APP_LOG_LEVEL", "INFO"), FeatureFlags.load(), _env_bool("KEEPA_ENABLED",keepa_key_set), int(os.getenv("KEEPA_CACHE_TTL_SECONDS","21600")))

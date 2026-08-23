@@ -46,6 +46,14 @@ BASELINE_STATEMENTS = (
 
 MIGRATIONS = (
     Migration(1, "001_initial_baseline", BASELINE_STATEMENTS),
+    Migration(2, "002_keepa_response_cache", (
+        """CREATE TABLE IF NOT EXISTS keepa_cache(
+            asin TEXT NOT NULL, marketplace TEXT NOT NULL,
+            observed_at TEXT NOT NULL, result_json TEXT NOT NULL,
+            PRIMARY KEY(asin, marketplace)
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_keepa_cache_observed_at ON keepa_cache(observed_at)",
+    )),
 )
 
 

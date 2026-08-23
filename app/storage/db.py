@@ -1,5 +1,6 @@
 from __future__ import annotations
 import json, sqlite3
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from app.storage.migrations import BASELINE_STATEMENTS, apply_migrations, current_version
 
@@ -31,3 +32,12 @@ class Database:
         with self.connect() as c: c.execute("UPDATE jobs SET status=?,cursor=?,completed_at=CURRENT_TIMESTAMP,error=? WHERE id=?",(status,cursor,error,job_id))
     def record_error(self,job_id,provider,exc):
         with self.connect() as c: c.execute("INSERT INTO errors(job_id,provider,error_class,message) VALUES(?,?,?,?)",(job_id,provider,type(exc).__name__,str(exc)))
+    def get_keepa_cache(self,asin,marketplace,ttl_seconds):
+        cutoff=(datetime.now(timezone.utc)-timedelta(seconds=ttl_seconds)).isoformat()
+        with self.connect() as c:
+            row=c.execute("SELECT result_json,observed_at FROM keepa_cache WHERE asin=? AND marketplace=? AND observed_at>=?",(asin,marketplace,cutoff)).fetchone()
+        return (json.loads(row[0]),row[1]) if row else None
+    def save_keepa_cache(self,asin,marketplace,observed_at,result):
+        payload=json.dumps(result,ensure_ascii=False,separators=(",",":"))
+        with self.connect() as c:
+            c.execute("INSERT INTO keepa_cache(asin,marketplace,observed_at,result_json) VALUES(?,?,?,?) ON CONFLICT(asin,marketplace) DO UPDATE SET observed_at=excluded.observed_at,result_json=excluded.result_json",(asin,marketplace,observed_at,payload))
