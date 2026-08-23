@@ -60,9 +60,11 @@ class Settings:
     min_arbitrage_drop_rate: float = 0.15
     max_arbitrage_sales_rank: int = 150000
     max_arbitrage_seller_count: int = 15
+    min_seller_decline_rate_30d: float = 0.30
+    min_seller_decline_score: int = 60
 
     @classmethod
     def load(cls) -> "Settings":
         _load_dotenv()
         keepa_key_set=bool(os.getenv("KEEPA_API_KEY"))
-        return cls(Path(os.getenv("APP_DB_PATH", "data/profit_finder.db")), int(os.getenv("MIN_PROFIT_YEN", "500")), float(os.getenv("MIN_PROFIT_MARGIN", "0.15")), int(os.getenv("TODAY_SCORE_THRESHOLD", "85")), os.getenv("APP_LOG_LEVEL", "INFO"), FeatureFlags.load(), _env_bool("KEEPA_ENABLED",keepa_key_set), int(os.getenv("KEEPA_CACHE_TTL_SECONDS","21600")), int(os.getenv("MIN_ARBITRAGE_PROFIT_YEN","1000")), float(os.getenv("MIN_ARBITRAGE_ROI","0.20")), float(os.getenv("MIN_ARBITRAGE_DROP_RATE","0.15")), int(os.getenv("MAX_ARBITRAGE_SALES_RANK","150000")), int(os.getenv("MAX_ARBITRAGE_SELLER_COUNT","15")))
+        return cls(Path(os.getenv("APP_DB_PATH", "data/profit_finder.db")), int(os.getenv("MIN_PROFIT_YEN", "500")), float(os.getenv("MIN_PROFIT_MARGIN", "0.15")), int(os.getenv("TODAY_SCORE_THRESHOLD", "85")), os.getenv("APP_LOG_LEVEL", "INFO"), FeatureFlags.load(), _env_bool("KEEPA_ENABLED",keepa_key_set), int(os.getenv("KEEPA_CACHE_TTL_SECONDS","21600")), int(os.getenv("MIN_ARBITRAGE_PROFIT_YEN","1000")), float(os.getenv("MIN_ARBITRAGE_ROI","0.20")), float(os.getenv("MIN_ARBITRAGE_DROP_RATE","0.15")), int(os.getenv("MAX_ARBITRAGE_SALES_RANK","150000")), int(os.getenv("MAX_ARBITRAGE_SELLER_COUNT","15")), float(os.getenv("MIN_SELLER_DECLINE_RATE_30D","0.30")), int(os.getenv("MIN_SELLER_DECLINE_SCORE","60")))
