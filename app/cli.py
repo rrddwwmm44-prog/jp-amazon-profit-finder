@@ -4,11 +4,11 @@ from pathlib import Path
 from app.config import Settings
 from app.storage.db import Database
 from app.runner import run
-from app.engines import EngineContext, EngineRegistry, EngineStatus, MarketPriceEngine, UnknownEngineError
+from app.engines import AmazonArbitrageEngine, EngineContext, EngineRegistry, EngineStatus, MarketPriceEngine, UnknownEngineError
 from app.services.keepa_budget import build_keepa_budget
 
 def engine_registry():
-    registry=EngineRegistry(); registry.register(MarketPriceEngine()); return registry
+    registry=EngineRegistry(); registry.register(MarketPriceEngine()); registry.register(AmazonArbitrageEngine()); return registry
 
 def doctor(settings,db):
     checks=[]
