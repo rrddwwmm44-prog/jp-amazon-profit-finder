@@ -52,6 +52,26 @@ class KeepaProviderTests(unittest.TestCase):
             self.assertTrue(second.cache_hit)
             self.assertIsNone(second.tokens)
             self.assertEqual(client.calls, 1)
+            with db.connect() as connection:
+                self.assertEqual(connection.execute("SELECT COUNT(*) FROM keepa_usage").fetchone()[0],1)
+                self.assertEqual(connection.execute("SELECT COUNT(*) FROM keepa_cache_hits").fetchone()[0],1)
+
+    def test_live_call_saves_usage_metadata(self):
+        with tempfile.TemporaryDirectory() as raw:
+            db=Database(Path(raw)/"usage.db"); db.migrate()
+            KeepaProvider("test-key",MockKeepaClient(),db,0).get_product(ASIN)
+            with db.connect() as connection:
+                row=connection.execute("SELECT operation,asin,tokens_consumed,tokens_left,refill_rate,status,source FROM keepa_usage").fetchone()
+            self.assertEqual(tuple(row),("product",ASIN,1,42,5,"success","jp-amazon-profit-finder"))
+
+    def test_exhausted_call_is_saved(self):
+        with tempfile.TemporaryDirectory() as raw:
+            db=Database(Path(raw)/"usage.db"); db.migrate()
+            with self.assertRaises(KeepaTokensExhausted):
+                KeepaProvider("test-key",MockKeepaClient(exhausted=True),db,0).get_product(ASIN)
+            with db.connect() as connection:
+                row=connection.execute("SELECT tokens_consumed,tokens_left,status FROM keepa_usage").fetchone()
+            self.assertEqual(tuple(row),(0,0,"exhausted"))
 
     def test_api_key_is_required_only_when_keepa_provider_is_used(self):
         with self.assertRaises(ValueError):

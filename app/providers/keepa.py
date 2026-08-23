@@ -110,6 +110,7 @@ class MockKeepaClient:
         envelope = {"tokensLeft": 42, "tokensConsumed": 1, "refillRate": 5, "refillIn": 30000, "tokenFlowReduction": 0.0, "processingTimeInMs": 12}
         if self.exhausted:
             envelope["tokensLeft"] = 0
+            envelope["tokensConsumed"] = 0
             raise KeepaHttpError(429, envelope)
         current = [-1] * 12
         if not self.missing:
@@ -137,13 +138,22 @@ class KeepaProvider:
             cached = self._db.get_keepa_cache(asin, JAPAN_MARKETPLACE, self._cache_ttl_seconds)
             if cached:
                 payload, _ = cached
+                self._db.record_keepa_cache_hit(datetime.now(timezone.utc).isoformat(), "product", asin)
                 return KeepaResult(KeepaProduct(**payload), None, True)
+        observed_at = datetime.now(timezone.utc).isoformat()
         try:
             payload = self._client.get_product(self._api_key, asin, JAPAN_DOMAIN_ID)
         except KeepaHttpError as exc:
+            tokens = _tokens(exc.payload) if exc.payload else None
+            if self._db is not None:
+                self._db.record_keepa_usage(observed_at, "product", asin, tokens, "exhausted" if exc.status == 429 else "failed")
             if exc.status == 429:
-                raise KeepaTokensExhausted(_tokens(exc.payload)) from None
+                raise KeepaTokensExhausted(tokens) from None
             raise
+        tokens = _tokens(payload)
+        status = "failed" if payload.get("error") or not (payload.get("products") or []) else "success"
+        if self._db is not None:
+            self._db.record_keepa_usage(observed_at, "product", asin, tokens, status)
         if payload.get("error"):
             raise KeepaError("Keepa returned an error")
         products = payload.get("products") or []
@@ -152,7 +162,7 @@ class KeepaProvider:
         product = _normalize_product(products[0], asin)
         if self._db is not None:
             self._db.save_keepa_cache(asin, JAPAN_MARKETPLACE, product.observed_at, asdict(product))
-        return KeepaResult(product, _tokens(payload))
+        return KeepaResult(product, tokens)
 
 
 def _value(values: Any, index: int) -> int | None:

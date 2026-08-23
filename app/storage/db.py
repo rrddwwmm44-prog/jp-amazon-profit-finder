@@ -41,3 +41,19 @@ class Database:
         payload=json.dumps(result,ensure_ascii=False,separators=(",",":"))
         with self.connect() as c:
             c.execute("INSERT INTO keepa_cache(asin,marketplace,observed_at,result_json) VALUES(?,?,?,?) ON CONFLICT(asin,marketplace) DO UPDATE SET observed_at=excluded.observed_at,result_json=excluded.result_json",(asin,marketplace,observed_at,payload))
+    def record_keepa_usage(self,observed_at,operation,asin,tokens,status,source="jp-amazon-profit-finder"):
+        values=(observed_at,operation,asin,tokens.tokens_consumed if tokens else None,tokens.tokens_left if tokens else None,tokens.refill_rate if tokens else None,tokens.refill_in if tokens else None,tokens.token_flow_reduction if tokens else None,tokens.processing_time_ms if tokens else None,status,source)
+        with self.connect() as c:
+            c.execute("INSERT INTO keepa_usage(observed_at,operation,asin,tokens_consumed,tokens_left,refill_rate,refill_in,token_flow_reduction,processing_time_ms,status,source) VALUES(?,?,?,?,?,?,?,?,?,?,?)",values)
+    def record_keepa_cache_hit(self,observed_at,operation,asin,source="jp-amazon-profit-finder"):
+        with self.connect() as c:
+            c.execute("INSERT INTO keepa_cache_hits(observed_at,operation,asin,source) VALUES(?,?,?,?)",(observed_at,operation,asin,source))
+    def keepa_usage_since(self,observed_at):
+        with self.connect() as c:
+            return [dict(row) for row in c.execute("SELECT * FROM keepa_usage WHERE observed_at>=? ORDER BY observed_at",(observed_at,))]
+    def keepa_cache_hits_since(self,observed_at):
+        with self.connect() as c:
+            return [dict(row) for row in c.execute("SELECT * FROM keepa_cache_hits WHERE observed_at>=? ORDER BY observed_at",(observed_at,))]
+    def latest_keepa_usage(self,limit=2):
+        with self.connect() as c:
+            return [dict(row) for row in c.execute("SELECT * FROM keepa_usage ORDER BY observed_at DESC,id DESC LIMIT ?",(limit,))]

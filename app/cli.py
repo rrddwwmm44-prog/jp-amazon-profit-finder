@@ -5,6 +5,7 @@ from app.config import Settings
 from app.storage.db import Database
 from app.runner import run
 from app.engines import EngineContext, EngineRegistry, EngineStatus, MarketPriceEngine, UnknownEngineError
+from app.services.keepa_budget import build_keepa_budget
 
 def engine_registry():
     registry=EngineRegistry(); registry.register(MarketPriceEngine()); return registry
@@ -26,12 +27,15 @@ def status(db):
     with db.connect() as c:
         rows=c.execute("SELECT id,mode,status,cursor,started_at,completed_at,error FROM jobs ORDER BY id DESC LIMIT 10").fetchall()
     print(json.dumps([dict(r) for r in rows],ensure_ascii=False,indent=2)); return 0
+def keepa_budget(db):
+    db.migrate(); print(json.dumps(build_keepa_budget(db),ensure_ascii=False,indent=2)); return 0
 def main(argv=None):
     p=argparse.ArgumentParser(description="日本Amazon 利益商品発見システム"); sub=p.add_subparsers(dest="cmd",required=True)
-    sub.add_parser("doctor"); r=sub.add_parser("run-all"); r.add_argument("--mode",choices=["mock","live"],default="mock"); one=sub.add_parser("run"); one.add_argument("engine"); one.add_argument("--mode",choices=["mock","live"],default="mock"); sub.add_parser("resume"); sub.add_parser("status")
+    sub.add_parser("doctor"); r=sub.add_parser("run-all"); r.add_argument("--mode",choices=["mock","live"],default="mock"); one=sub.add_parser("run"); one.add_argument("engine"); one.add_argument("--mode",choices=["mock","live"],default="mock"); sub.add_parser("resume"); sub.add_parser("status"); sub.add_parser("keepa-budget")
     a=p.parse_args(argv); settings=Settings.load(); db=Database(settings.db_path)
     if a.cmd=="doctor": return doctor(settings,db)
     if a.cmd=="status": return status(db)
+    if a.cmd=="keepa-budget": return keepa_budget(db)
     db.migrate()
     if a.cmd in {"run-all","run"}:
         registry=engine_registry(); context=EngineContext(settings,db,a.mode)

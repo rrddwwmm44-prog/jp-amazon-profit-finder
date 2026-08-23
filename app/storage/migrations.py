@@ -54,6 +54,23 @@ MIGRATIONS = (
         )""",
         "CREATE INDEX IF NOT EXISTS idx_keepa_cache_observed_at ON keepa_cache(observed_at)",
     )),
+    Migration(3, "003_keepa_usage", (
+        """CREATE TABLE IF NOT EXISTS keepa_usage(
+            id INTEGER PRIMARY KEY, observed_at TEXT NOT NULL,
+            operation TEXT NOT NULL, asin TEXT,
+            tokens_consumed INTEGER, tokens_left INTEGER,
+            refill_rate INTEGER, refill_in INTEGER,
+            token_flow_reduction REAL, processing_time_ms INTEGER,
+            status TEXT NOT NULL, source TEXT NOT NULL
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_keepa_usage_observed_at ON keepa_usage(observed_at)",
+        "CREATE INDEX IF NOT EXISTS idx_keepa_usage_operation ON keepa_usage(operation, observed_at)",
+        """CREATE TABLE IF NOT EXISTS keepa_cache_hits(
+            id INTEGER PRIMARY KEY, observed_at TEXT NOT NULL,
+            operation TEXT NOT NULL, asin TEXT, source TEXT NOT NULL
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_keepa_cache_hits_observed_at ON keepa_cache_hits(observed_at)",
+    )),
 )
 
 

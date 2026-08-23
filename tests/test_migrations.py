@@ -4,19 +4,19 @@ import unittest
 from pathlib import Path
 
 from app.storage.db import Database
-from app.storage.migrations import BASELINE_STATEMENTS, MigrationError
+from app.storage.migrations import BASELINE_STATEMENTS, MIGRATIONS, MIGRATION_TABLE_SQL, MigrationError
 
 
 class MigrationTests(unittest.TestCase):
     def test_new_database_creates_baseline_schema(self):
         with tempfile.TemporaryDirectory() as raw:
             db=Database(Path(raw)/"new.db")
-            self.assertEqual(db.migrate(),[1,2])
+            self.assertEqual(db.migrate(),[1,2,3])
             with db.connect() as connection:
                 tables={row[0] for row in connection.execute(
                     "SELECT name FROM sqlite_master WHERE type='table'"
                 )}
-            self.assertTrue({"jobs","candidates","errors","snapshots","schema_migrations","keepa_cache"} <= tables)
+            self.assertTrue({"jobs","candidates","errors","snapshots","schema_migrations","keepa_cache","keepa_usage","keepa_cache_hits"} <= tables)
 
     def test_existing_database_is_baselined_without_data_loss(self):
         with tempfile.TemporaryDirectory() as raw:
@@ -26,7 +26,7 @@ class MigrationTests(unittest.TestCase):
             connection.execute("INSERT INTO jobs(mode,status) VALUES('mock','COMPLETED')")
             connection.commit(); connection.close()
             db=Database(path)
-            self.assertEqual(db.migrate(),[1,2])
+            self.assertEqual(db.migrate(),[1,2,3])
             with db.connect() as connection:
                 self.assertEqual(connection.execute("SELECT COUNT(*) FROM jobs").fetchone()[0],1)
                 row=connection.execute("SELECT version,name,applied_at FROM schema_migrations").fetchone()
@@ -36,13 +36,13 @@ class MigrationTests(unittest.TestCase):
     def test_second_run_does_not_reapply_migration(self):
         with tempfile.TemporaryDirectory() as raw:
             db=Database(Path(raw)/"repeat.db")
-            self.assertEqual(db.migrate(),[1,2])
+            self.assertEqual(db.migrate(),[1,2,3])
             with db.connect() as connection:
                 first=connection.execute("SELECT applied_at FROM schema_migrations WHERE version=1").fetchone()[0]
             self.assertEqual(db.migrate(),[])
             with db.connect() as connection:
                 rows=connection.execute("SELECT version,applied_at FROM schema_migrations").fetchall()
-            self.assertEqual(len(rows),2)
+            self.assertEqual(len(rows),3)
             self.assertEqual(rows[0][1],first)
 
     def test_current_version_is_available(self):
@@ -50,9 +50,9 @@ class MigrationTests(unittest.TestCase):
             db=Database(Path(raw)/"version.db")
             self.assertEqual(db.schema_version(),0)
             db.migrate()
-            self.assertEqual(db.schema_version(),2)
+            self.assertEqual(db.schema_version(),3)
 
-    def test_v1_database_upgrades_to_v2_without_data_loss(self):
+    def test_v1_database_upgrades_to_latest_without_data_loss(self):
         with tempfile.TemporaryDirectory() as raw:
             path=Path(raw)/"v1.db"
             connection=sqlite3.connect(path)
@@ -62,10 +62,27 @@ class MigrationTests(unittest.TestCase):
             connection.execute("INSERT INTO jobs(mode,status) VALUES('mock','COMPLETED')")
             connection.commit(); connection.close()
             db=Database(path)
-            self.assertEqual(db.migrate(),[2])
+            self.assertEqual(db.migrate(),[2,3])
             with db.connect() as connection:
                 self.assertEqual(connection.execute("SELECT COUNT(*) FROM jobs").fetchone()[0],1)
-                self.assertEqual(connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0],2)
+                self.assertEqual(connection.execute("SELECT MAX(version) FROM schema_migrations").fetchone()[0],3)
+
+    def test_v2_database_upgrades_to_v3_without_data_loss(self):
+        with tempfile.TemporaryDirectory() as raw:
+            path=Path(raw)/"v2.db"
+            connection=sqlite3.connect(path)
+            connection.execute(MIGRATION_TABLE_SQL)
+            for migration in MIGRATIONS[:2]:
+                for statement in migration.statements: connection.execute(statement)
+                connection.execute("INSERT INTO schema_migrations(version,name) VALUES(?,?)",(migration.version,migration.name))
+            connection.execute("INSERT INTO keepa_cache(asin,marketplace,observed_at,result_json) VALUES('B012345678','amazon.co.jp','2026-01-01T00:00:00+00:00','{}')")
+            connection.commit(); connection.close()
+            db=Database(path)
+            self.assertEqual(db.schema_version(),2)
+            self.assertEqual(db.migrate(),[3])
+            self.assertEqual(db.schema_version(),3)
+            with db.connect() as connection:
+                self.assertEqual(connection.execute("SELECT COUNT(*) FROM keepa_cache").fetchone()[0],1)
 
     def test_failed_baseline_is_not_recorded(self):
         with tempfile.TemporaryDirectory() as raw:
