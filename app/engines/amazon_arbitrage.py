@@ -13,13 +13,13 @@ class ArbitrageSource(Protocol):
 class MockArbitrageSource:
     def load(self) -> list[ArbitrageInput]:
         return [
-            ArbitrageInput("B0ARB00001","strong",3000,5500,5600,sales_rank=12000,new_seller_count=4,amazon_owned=False,demand_quality="good"),
-            ArbitrageInput("B0ARB00002","low-profit",3000,4300,4400,sales_rank=20000,new_seller_count=3),
-            ArbitrageInput("B0ARB00003","low-roi",10000,13000,13500,sales_rank=25000,new_seller_count=4),
-            ArbitrageInput("B0ARB00004","small-drop",4500,5000,5100,sales_rank=20000,new_seller_count=4),
-            ArbitrageInput("B0ARB00005","missing-history",3000,sales_rank=20000,new_seller_count=4),
-            ArbitrageInput("B0ARB00006","missing-rank",3000,5500,5600,new_seller_count=4,amazon_owned=False),
-            ArbitrageInput("B0ARB00007","amazon-owned",3000,5500,5600,sales_rank=12000,new_seller_count=4,amazon_owned=True,demand_quality="good"),
+            ArbitrageInput("B0ARB00001","strong",3000,5500,5600,sales_rank=12000,new_offer_count=4,amazon_owned=False,demand_quality="good"),
+            ArbitrageInput("B0ARB00002","low-profit",3000,4300,4400,sales_rank=20000,new_offer_count=3),
+            ArbitrageInput("B0ARB00003","low-roi",10000,13000,13500,sales_rank=25000,new_offer_count=4),
+            ArbitrageInput("B0ARB00004","small-drop",4500,5000,5100,sales_rank=20000,new_offer_count=4),
+            ArbitrageInput("B0ARB00005","missing-history",3000,sales_rank=20000,new_offer_count=4),
+            ArbitrageInput("B0ARB00006","missing-rank",3000,5500,5600,new_offer_count=4,amazon_owned=False),
+            ArbitrageInput("B0ARB00007","amazon-owned",3000,5500,5600,sales_rank=12000,new_offer_count=4,amazon_owned=True,demand_quality="good"),
         ]
 
 

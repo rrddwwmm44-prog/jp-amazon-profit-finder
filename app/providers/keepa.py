@@ -10,6 +10,7 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 from app.storage.db import Database
+from app.services.keepa_history import HistoryQuality, NormalizedKeepaHistory, normalize_keepa_history
 
 
 KEEPA_PRODUCT_URL = "https://api.keepa.com/product"
@@ -45,6 +46,7 @@ class KeepaResult:
     product: KeepaProduct
     tokens: KeepaTokenMetadata | None
     cache_hit: bool = False
+    history: NormalizedKeepaHistory | None = None
 
 
 class KeepaError(RuntimeError):
@@ -122,13 +124,17 @@ class MockKeepaClient:
 class KeepaProvider:
     """Candidate-ASIN detail provider; intentionally separate from market Provider.fetch()."""
 
-    def __init__(self, api_key: str, client: KeepaTransport | None = None, db: Database | None = None, cache_ttl_seconds: int = 21600):
+    def __init__(self, api_key: str, client: KeepaTransport | None = None, db: Database | None = None,
+                 cache_ttl_seconds: int = 21600, history_max_gap_days: int = 14,
+                 history_minimum_median_samples: int = 3):
         if not api_key:
             raise ValueError("Keepa API key is not configured")
         self._api_key = api_key
         self._client = client or KeepaHttpClient()
         self._db = db
         self._cache_ttl_seconds = cache_ttl_seconds
+        self._history_max_gap_days = history_max_gap_days
+        self._history_minimum_median_samples = history_minimum_median_samples
 
     def get_product(self, asin: str) -> KeepaResult:
         asin = asin.strip().upper()
@@ -138,8 +144,15 @@ class KeepaProvider:
             cached = self._db.get_keepa_cache(asin, JAPAN_MARKETPLACE, self._cache_ttl_seconds)
             if cached:
                 payload, _ = cached
-                self._db.record_keepa_cache_hit(datetime.now(timezone.utc).isoformat(), "product", asin)
-                return KeepaResult(KeepaProduct(**payload), None, True)
+                if "product" in payload:
+                    product = KeepaProduct(**payload["product"])
+                    history_payload = payload.get("history")
+                    history = NormalizedKeepaHistory(
+                        **{**history_payload, "quality": HistoryQuality(history_payload["quality"])}
+                    ) if isinstance(history_payload, dict) else None
+                    self._db.record_keepa_cache_hit(datetime.now(timezone.utc).isoformat(), "product", asin)
+                    return KeepaResult(product, None, True, history)
+                # Legacy flat cache entries contain no history and are refreshed once.
         observed_at = datetime.now(timezone.utc).isoformat()
         try:
             payload = self._client.get_product(self._api_key, asin, JAPAN_DOMAIN_ID)
@@ -159,10 +172,19 @@ class KeepaProvider:
         products = payload.get("products") or []
         if not products:
             raise KeepaError("Keepa returned no product")
-        product = _normalize_product(products[0], asin)
+        raw_product = products[0]
+        product = _normalize_product(raw_product, asin)
+        history = normalize_keepa_history(
+            raw_product, observed_at=datetime.fromisoformat(product.observed_at),
+            max_gap_days=self._history_max_gap_days,
+            minimum_median_samples=self._history_minimum_median_samples,
+        )
         if self._db is not None:
-            self._db.save_keepa_cache(asin, JAPAN_MARKETPLACE, product.observed_at, asdict(product))
-        return KeepaResult(product, tokens)
+            self._db.save_keepa_cache(
+                asin, JAPAN_MARKETPLACE, product.observed_at,
+                {"product": asdict(product), "history": asdict(history)},
+            )
+        return KeepaResult(product, tokens, history=history)
 
 
 def _value(values: Any, index: int) -> int | None:

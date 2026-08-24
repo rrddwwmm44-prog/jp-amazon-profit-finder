@@ -78,7 +78,7 @@ class AmazonArbitrageTests(unittest.TestCase):
     def test_score_is_bounded_and_demand_competition_reject(self):
         with tempfile.TemporaryDirectory() as raw:
             settings=self.settings(Path(raw)/"db")
-            weak=evaluate_arbitrage(ArbitrageInput("B0ARB00008","weak",3000,5500,sales_rank=300000,new_seller_count=20),settings)
+            weak=evaluate_arbitrage(ArbitrageInput("B0ARB00008","weak",3000,5500,sales_rank=300000,new_offer_count=20),settings)
             self.assertIn("weak_demand",weak.reject_reasons)
             self.assertIn("excessive_competition",weak.reject_reasons)
             for item in MockArbitrageSource().load():

@@ -55,11 +55,13 @@ class Settings:
     engine_flags: FeatureFlags = field(default_factory=FeatureFlags)
     keepa_enabled: bool = False
     keepa_cache_ttl_seconds: int = 21600
+    keepa_history_max_gap_days: int = 14
+    keepa_history_minimum_median_samples: int = 3
     min_arbitrage_profit_yen: int = 1000
     min_arbitrage_roi: float = 0.20
     min_arbitrage_drop_rate: float = 0.15
     max_arbitrage_sales_rank: int = 150000
-    max_arbitrage_seller_count: int = 15
+    max_arbitrage_new_offer_count: int = 15
     min_seller_decline_rate_30d: float = 0.30
     min_seller_decline_score: int = 60
 
@@ -67,4 +69,23 @@ class Settings:
     def load(cls) -> "Settings":
         _load_dotenv()
         keepa_key_set=bool(os.getenv("KEEPA_API_KEY"))
-        return cls(Path(os.getenv("APP_DB_PATH", "data/profit_finder.db")), int(os.getenv("MIN_PROFIT_YEN", "500")), float(os.getenv("MIN_PROFIT_MARGIN", "0.15")), int(os.getenv("TODAY_SCORE_THRESHOLD", "85")), os.getenv("APP_LOG_LEVEL", "INFO"), FeatureFlags.load(), _env_bool("KEEPA_ENABLED",keepa_key_set), int(os.getenv("KEEPA_CACHE_TTL_SECONDS","21600")), int(os.getenv("MIN_ARBITRAGE_PROFIT_YEN","1000")), float(os.getenv("MIN_ARBITRAGE_ROI","0.20")), float(os.getenv("MIN_ARBITRAGE_DROP_RATE","0.15")), int(os.getenv("MAX_ARBITRAGE_SALES_RANK","150000")), int(os.getenv("MAX_ARBITRAGE_SELLER_COUNT","15")), float(os.getenv("MIN_SELLER_DECLINE_RATE_30D","0.30")), int(os.getenv("MIN_SELLER_DECLINE_SCORE","60")))
+        return cls(
+            db_path=Path(os.getenv("APP_DB_PATH", "data/profit_finder.db")),
+            min_profit_yen=int(os.getenv("MIN_PROFIT_YEN", "500")),
+            min_profit_margin=float(os.getenv("MIN_PROFIT_MARGIN", "0.15")),
+            today_score_threshold=int(os.getenv("TODAY_SCORE_THRESHOLD", "85")),
+            log_level=os.getenv("APP_LOG_LEVEL", "INFO"), engine_flags=FeatureFlags.load(),
+            keepa_enabled=_env_bool("KEEPA_ENABLED",keepa_key_set),
+            keepa_cache_ttl_seconds=int(os.getenv("KEEPA_CACHE_TTL_SECONDS","21600")),
+            keepa_history_max_gap_days=int(os.getenv("KEEPA_HISTORY_MAX_GAP_DAYS","14")),
+            keepa_history_minimum_median_samples=int(os.getenv("KEEPA_HISTORY_MINIMUM_MEDIAN_SAMPLES","3")),
+            min_arbitrage_profit_yen=int(os.getenv("MIN_ARBITRAGE_PROFIT_YEN","1000")),
+            min_arbitrage_roi=float(os.getenv("MIN_ARBITRAGE_ROI","0.20")),
+            min_arbitrage_drop_rate=float(os.getenv("MIN_ARBITRAGE_DROP_RATE","0.15")),
+            max_arbitrage_sales_rank=int(os.getenv("MAX_ARBITRAGE_SALES_RANK","150000")),
+            max_arbitrage_new_offer_count=int(os.getenv(
+                "MAX_ARBITRAGE_NEW_OFFER_COUNT", os.getenv("MAX_ARBITRAGE_SELLER_COUNT", "15")
+            )),
+            min_seller_decline_rate_30d=float(os.getenv("MIN_SELLER_DECLINE_RATE_30D","0.30")),
+            min_seller_decline_score=int(os.getenv("MIN_SELLER_DECLINE_SCORE","60")),
+        )

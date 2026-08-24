@@ -71,8 +71,8 @@ class SellerDeclineTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as raw:
             _,rows=self.assessments(raw)
             missing=rows["missing-current"]
-            self.assertIsNone(missing.evidence["seller_current"])
-            self.assertEqual(missing.evidence["seller_current_state"],"not_observed")
+            self.assertIsNone(missing.evidence["new_offer_count_current"])
+            self.assertEqual(missing.evidence["new_offer_count_current_state"],"not_observed")
             self.assertTrue(missing.is_provisional)
             self.assertIn("insufficient_history",missing.reject_reasons)
             self.assertIsNone(missing.decline_rates["30d"])
@@ -83,7 +83,7 @@ class SellerDeclineTests(unittest.TestCase):
         self.assertEqual(verified.value,0)
         with tempfile.TemporaryDirectory() as raw:
             _,rows=self.assessments(raw); zero=rows["verified-zero"]
-            self.assertEqual(zero.evidence["seller_current_state"],"verified_zero")
+            self.assertEqual(zero.evidence["new_offer_count_current_state"],"verified_zero")
             self.assertEqual(zero.decline_rates["30d"],1.0)
             self.assertTrue(zero.is_candidate)
 

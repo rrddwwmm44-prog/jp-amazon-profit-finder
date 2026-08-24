@@ -34,10 +34,10 @@ class SellerObservation:
 class SellerDeclineInput:
     asin: str
     title: str
-    sellers_current: SellerObservation
-    sellers_7d: SellerObservation
-    sellers_30d: SellerObservation
-    sellers_90d: SellerObservation
+    new_offers_current: SellerObservation
+    new_offers_7d: SellerObservation
+    new_offers_30d: SellerObservation
+    new_offers_90d: SellerObservation
     price_current: float | None
     price_7d: float | None
     price_30d: float | None
@@ -87,7 +87,7 @@ def _demand(current: int | None,past: int | None) -> DemandTrend:
 
 
 def _acceleration(item: SellerDeclineInput) -> float | None:
-    current=item.sellers_current.value; d7=item.sellers_7d.value; d30=item.sellers_30d.value; d90=item.sellers_90d.value
+    current=item.new_offers_current.value; d7=item.new_offers_7d.value; d30=item.new_offers_30d.value; d90=item.new_offers_90d.value
     if current is None or d7 is None:
         return None
     recent=(d7-current)/7
@@ -100,12 +100,12 @@ def _acceleration(item: SellerDeclineInput) -> float | None:
 
 
 def evaluate_seller_decline(item: SellerDeclineInput,settings: Settings) -> SellerDeclineAssessment:
-    current=item.sellers_current.value
-    rates={"7d":_rate(current,item.sellers_7d.value),"30d":_rate(current,item.sellers_30d.value),"90d":_rate(current,item.sellers_90d.value)}
+    current=item.new_offers_current.value
+    rates={"7d":_rate(current,item.new_offers_7d.value),"30d":_rate(current,item.new_offers_30d.value),"90d":_rate(current,item.new_offers_90d.value)}
     prices={"7d":_price_rate(item.price_current,item.price_7d),"30d":_price_rate(item.price_current,item.price_30d),"90d":_price_rate(item.price_current,item.price_90d)}
     acceleration=_acceleration(item)
     demand=_demand(item.sales_rank_current,item.sales_rank_30d)
-    points=[item.sellers_90d.value,item.sellers_30d.value,item.sellers_7d.value,current]
+    points=[item.new_offers_90d.value,item.new_offers_30d.value,item.new_offers_7d.value,current]
     observed_pairs=[(a,b) for a,b in zip(points,points[1:]) if a is not None and b is not None]
     declining_intervals=sum(a>b for a,b in observed_pairs)
     sufficient_history=rates["30d"] is not None and len(observed_pairs)>=2
@@ -119,7 +119,7 @@ def evaluate_seller_decline(item: SellerDeclineInput,settings: Settings) -> Sell
     if demand_risk: rejects.append("demand_decline_risk")
     if score < settings.min_seller_decline_score: rejects.append("weak_score")
     provisional=not sufficient_history or demand == DemandTrend.UNKNOWN
-    evidence={"seller_current":current,"seller_current_state":item.sellers_current.state.value if item.sellers_current.state else "observed","decline_rates":rates,"decline_acceleration":acceleration,"declining_intervals":declining_intervals,"price_trends":prices,"demand_trend":demand.value,"amazon_owned":item.amazon_owned,"supply_contraction_likely":contraction}
+    evidence={"new_offer_count_current":current,"new_offer_count_current_state":item.new_offers_current.state.value if item.new_offers_current.state else "observed","decline_rates":rates,"decline_acceleration":acceleration,"declining_intervals":declining_intervals,"price_trends":prices,"demand_trend":demand.value,"amazon_owned":item.amazon_owned,"supply_contraction_likely":contraction}
     reason=_reason(evidence)
     return SellerDeclineAssessment(item,not rejects,provisional,rates,acceleration,prices,demand,contraction,demand_risk,score,tuple(rejects),reason,evidence)
 

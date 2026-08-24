@@ -20,7 +20,7 @@ class ArbitrageInput:
     historical_high: float | None = None
     buy_box_price: float | None = None
     sales_rank: int | None = None
-    new_seller_count: int | None = None
+    new_offer_count: int | None = None
     amazon_owned: bool | None = None
     demand_quality: str | None = None
     observed_at: str | None = None
@@ -62,18 +62,18 @@ def evaluate_arbitrage(item: ArbitrageInput, settings: Settings) -> ArbitrageAss
     if drop_rate is not None and drop_rate < settings.min_arbitrage_drop_rate: rejects.append("insufficient_price_drop")
     weak_demand=item.demand_quality == "weak" or (item.sales_rank is not None and item.sales_rank > settings.max_arbitrage_sales_rank)
     if weak_demand: rejects.append("weak_demand")
-    if item.new_seller_count is not None and item.new_seller_count > settings.max_arbitrage_seller_count: rejects.append("excessive_competition")
+    if item.new_offer_count is not None and item.new_offer_count > settings.max_arbitrage_new_offer_count: rejects.append("excessive_competition")
     score=_score(item,drop_rate,profit,settings)
     missing=[]
     if item.sales_rank is None: missing.append("sales_rank")
-    if item.new_seller_count is None: missing.append("new_seller_count")
-    signal=ProductSignal("keepa_fixture","amazon_arbitrage",item.title,"",asin=item.asin,sales_rank=item.sales_rank,seller_count=item.new_seller_count,amazon_owned=item.amazon_owned,evidence={"matching_sources":["keepa"],"missing":missing})
+    if item.new_offer_count is None: missing.append("new_offer_count")
+    signal=ProductSignal("keepa_fixture","amazon_arbitrage",item.title,"",asin=item.asin,sales_rank=item.sales_rank,seller_count=item.new_offer_count,amazon_owned=item.amazon_owned,evidence={"matching_sources":["keepa"],"missing":missing})
     confidence,_=assess(signal)
     evidence={
         "purchase_price":purchase,"expected_sale_price":expected,"absolute_drop_yen":absolute_drop,
         "drop_rate":drop_rate,"profit_yen":profit.profit_yen if profit else None,
         "roi":profit.roi if profit else None,"sales_rank":item.sales_rank,
-        "new_seller_count":item.new_seller_count,"amazon_owned":item.amazon_owned,
+        "new_offer_count":item.new_offer_count,"amazon_owned":item.amazon_owned,
         "amazon_owned_return_risk":item.amazon_owned is True,"missing":missing,
     }
     reason=_reason(evidence)
@@ -89,9 +89,9 @@ def _score(item: ArbitrageInput, drop_rate: float | None, profit: ProfitResult |
     if item.demand_quality == "good" or (item.sales_rank is not None and item.sales_rank <= 50000): score+=15
     elif item.sales_rank is not None and item.sales_rank <= settings.max_arbitrage_sales_rank: score+=8
     elif item.sales_rank is None: score+=4
-    if item.new_seller_count is None: score+=3
-    elif item.new_seller_count <= 5: score+=10
-    elif item.new_seller_count <= settings.max_arbitrage_seller_count: score+=5
+    if item.new_offer_count is None: score+=3
+    elif item.new_offer_count <= 5: score+=10
+    elif item.new_offer_count <= settings.max_arbitrage_new_offer_count: score+=5
     if item.amazon_owned is True: score-=10
     return max(0,min(100,round(score)))
 
@@ -102,6 +102,6 @@ def _reason(evidence: dict) -> str:
     if evidence["profit_yen"] is not None: parts.append(f"profit={evidence['profit_yen']:.0f}yen")
     if evidence["roi"] is not None: parts.append(f"roi={evidence['roi']:.1%}")
     parts.append(f"sales_rank={evidence['sales_rank'] if evidence['sales_rank'] is not None else 'unknown'}")
-    parts.append(f"sellers={evidence['new_seller_count'] if evidence['new_seller_count'] is not None else 'unknown'}")
+    parts.append(f"new_offers={evidence['new_offer_count'] if evidence['new_offer_count'] is not None else 'unknown'}")
     if evidence["amazon_owned_return_risk"]: parts.append("amazon_owned_return_risk")
     return "; ".join(parts)

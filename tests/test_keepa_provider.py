@@ -19,6 +19,7 @@ class KeepaProviderTests(unittest.TestCase):
         result = KeepaProvider("test-key", MockKeepaClient()).get_product(ASIN)
         self.assertEqual((result.product.asin, result.product.domain_id, result.product.marketplace), (ASIN, JAPAN_DOMAIN_ID, "amazon.co.jp"))
         self.assertEqual((result.product.amazon_price, result.product.sales_rank, result.product.new_offer_count), (5980, 12345, 7))
+        self.assertIsNotNone(result.history)
 
     def test_token_metadata_is_normalized(self):
         tokens = KeepaProvider("test-key", MockKeepaClient()).get_product(ASIN).tokens
