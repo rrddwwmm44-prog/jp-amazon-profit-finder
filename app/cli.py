@@ -6,6 +6,8 @@ from app.storage.db import Database
 from app.runner import run
 from app.engines import AmazonArbitrageEngine, EngineContext, EngineRegistry, EngineStatus, MarketPriceEngine, SellerDeclineEngine, UnknownEngineError
 from app.services.keepa_budget import build_keepa_budget
+from app.providers.keepa import KeepaError, KeepaHttpError, KeepaProvider, KeepaTokensExhausted
+from app.services.keepa_evaluation import evaluate_keepa_asin
 
 def engine_registry():
     registry=EngineRegistry(); registry.register(MarketPriceEngine()); registry.register(AmazonArbitrageEngine()); registry.register(SellerDeclineEngine()); return registry
@@ -31,11 +33,35 @@ def keepa_budget(db):
     db.migrate(); print(json.dumps(build_keepa_budget(db),ensure_ascii=False,indent=2)); return 0
 def main(argv=None):
     p=argparse.ArgumentParser(description="日本Amazon 利益商品発見システム"); sub=p.add_subparsers(dest="cmd",required=True)
-    sub.add_parser("doctor"); r=sub.add_parser("run-all"); r.add_argument("--mode",choices=["mock","live"],default="mock"); one=sub.add_parser("run"); one.add_argument("engine"); one.add_argument("--mode",choices=["mock","live"],default="mock"); sub.add_parser("resume"); sub.add_parser("status"); sub.add_parser("keepa-budget")
+    sub.add_parser("doctor"); r=sub.add_parser("run-all"); r.add_argument("--mode",choices=["mock","live"],default="mock"); one=sub.add_parser("run"); one.add_argument("engine"); one.add_argument("--mode",choices=["mock","live"],default="mock"); sub.add_parser("resume"); sub.add_parser("status"); sub.add_parser("keepa-budget"); keepa_eval=sub.add_parser("keepa-evaluate"); keepa_eval.add_argument("asin")
     a=p.parse_args(argv); settings=Settings.load(); db=Database(settings.db_path)
     if a.cmd=="doctor": return doctor(settings,db)
     if a.cmd=="status": return status(db)
     if a.cmd=="keepa-budget": return keepa_budget(db)
+    if a.cmd=="keepa-evaluate":
+        api_key=os.getenv("KEEPA_API_KEY")
+        if not api_key:
+            print("Keepa API key is not configured",file=sys.stderr); return 2
+        db.migrate()
+        provider=KeepaProvider(
+            api_key,db=db,cache_ttl_seconds=settings.keepa_cache_ttl_seconds,
+            history_max_gap_days=settings.keepa_history_max_gap_days,
+            history_minimum_median_samples=settings.keepa_history_minimum_median_samples,
+        )
+        try:
+            report=evaluate_keepa_asin(provider,a.asin,settings,db)
+        except ValueError as exc:
+            print(str(exc),file=sys.stderr); return 2
+        except KeepaTokensExhausted:
+            print("Keepa tokens are exhausted",file=sys.stderr); return 3
+        except KeepaHttpError as exc:
+            category="authentication error" if exc.status in {401,403} else "product not found" if exc.status==404 else "transport error"
+            print(f"Keepa {category}",file=sys.stderr); return 3
+        except KeepaError as exc:
+            message=str(exc)
+            category="product not found" if "no product" in message.lower() else "response incompatibility"
+            print(f"Keepa {category}",file=sys.stderr); return 3
+        print(json.dumps(report,ensure_ascii=False,indent=2)); return 0
     db.migrate()
     if a.cmd in {"run-all","run"}:
         registry=engine_registry(); context=EngineContext(settings,db,a.mode)
