@@ -71,6 +71,29 @@ MIGRATIONS = (
         )""",
         "CREATE INDEX IF NOT EXISTS idx_keepa_cache_hits_observed_at ON keepa_cache_hits(observed_at)",
     )),
+    Migration(4, "004_opportunities", (
+        """CREATE TABLE IF NOT EXISTS opportunities(
+            opportunity_id TEXT PRIMARY KEY, identity_type TEXT NOT NULL,
+            identity_value TEXT NOT NULL UNIQUE, asin TEXT, jan TEXT,
+            product_name TEXT, manufacturer TEXT, observed_at TEXT NOT NULL,
+            opportunity_score INTEGER NOT NULL, urgency_score INTEGER,
+            confidence INTEGER, status TEXT NOT NULL, signal_count INTEGER NOT NULL,
+            summary_json TEXT NOT NULL, reasons_json TEXT NOT NULL,
+            risks_json TEXT NOT NULL, evidence_json TEXT NOT NULL
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_opportunities_score ON opportunities(status, opportunity_score DESC)",
+        """CREATE TABLE IF NOT EXISTS opportunity_signals(
+            id INTEGER PRIMARY KEY, opportunity_id TEXT NOT NULL,
+            signal_type TEXT NOT NULL, source_engine TEXT NOT NULL,
+            asin TEXT, jan TEXT, score INTEGER NOT NULL, candidate INTEGER NOT NULL,
+            observed_at TEXT NOT NULL, reason TEXT NOT NULL,
+            confidence INTEGER, quality TEXT, urgency_hint INTEGER,
+            evidence_json TEXT NOT NULL,
+            UNIQUE(opportunity_id, signal_type, source_engine, observed_at),
+            FOREIGN KEY(opportunity_id) REFERENCES opportunities(opportunity_id)
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_opportunity_signals_opportunity ON opportunity_signals(opportunity_id)",
+    )),
 )
 
 

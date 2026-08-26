@@ -1,5 +1,6 @@
 from __future__ import annotations
 import json, sqlite3
+from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from app.storage.migrations import BASELINE_STATEMENTS, apply_migrations, current_version
@@ -57,3 +58,34 @@ class Database:
     def latest_keepa_usage(self,limit=2):
         with self.connect() as c:
             return [dict(row) for row in c.execute("SELECT * FROM keepa_usage ORDER BY observed_at DESC,id DESC LIMIT ?",(limit,))]
+    def save_opportunity(self,opportunity):
+        summary=json.dumps(asdict(opportunity.summary),ensure_ascii=False,separators=(",",":"))
+        with self.connect() as c:
+            c.execute("""INSERT INTO opportunities(
+                opportunity_id,identity_type,identity_value,asin,jan,product_name,manufacturer,
+                observed_at,opportunity_score,urgency_score,confidence,status,signal_count,
+                summary_json,reasons_json,risks_json,evidence_json
+            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            ON CONFLICT(opportunity_id) DO UPDATE SET
+                observed_at=excluded.observed_at,opportunity_score=excluded.opportunity_score,
+                urgency_score=excluded.urgency_score,confidence=excluded.confidence,
+                status=excluded.status,signal_count=excluded.signal_count,
+                summary_json=excluded.summary_json,reasons_json=excluded.reasons_json,
+                risks_json=excluded.risks_json,evidence_json=excluded.evidence_json""",(
+                opportunity.opportunity_id,opportunity.identity_type,opportunity.identity_value,
+                opportunity.asin,opportunity.jan,opportunity.product_name,opportunity.manufacturer,
+                opportunity.observed_at,opportunity.opportunity_score,opportunity.urgency_score,
+                opportunity.confidence,opportunity.status.value,opportunity.signal_count,summary,
+                json.dumps(opportunity.reasons,ensure_ascii=False),json.dumps(opportunity.risks,ensure_ascii=False),
+                json.dumps(opportunity.evidence,ensure_ascii=False,separators=(",",":")),
+            ))
+            for signal in opportunity.signals:
+                c.execute("""INSERT OR IGNORE INTO opportunity_signals(
+                    opportunity_id,signal_type,source_engine,asin,jan,score,candidate,
+                    observed_at,reason,confidence,quality,urgency_hint,evidence_json
+                ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",(
+                    opportunity.opportunity_id,signal.signal_type,signal.source_engine,signal.asin,
+                    signal.jan,signal.score,int(signal.candidate),signal.observed_at,signal.reason,
+                    signal.confidence,signal.quality,signal.urgency_hint,
+                    json.dumps(signal.evidence,ensure_ascii=False,separators=(",",":")),
+                ))

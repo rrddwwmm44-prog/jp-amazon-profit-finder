@@ -8,6 +8,8 @@ from app.engines import AmazonArbitrageEngine, EngineContext, EngineRegistry, En
 from app.services.keepa_budget import build_keepa_budget
 from app.providers.keepa import KeepaError, KeepaHttpError, KeepaProvider, KeepaTokensExhausted
 from app.services.keepa_evaluation import evaluate_keepa_asin
+from app.opportunities.aggregator import OpportunityAggregator
+from app.opportunities.fixtures import mock_signals
 
 def engine_registry():
     registry=EngineRegistry(); registry.register(MarketPriceEngine()); registry.register(AmazonArbitrageEngine()); registry.register(SellerDeclineEngine()); return registry
@@ -33,11 +35,16 @@ def keepa_budget(db):
     db.migrate(); print(json.dumps(build_keepa_budget(db),ensure_ascii=False,indent=2)); return 0
 def main(argv=None):
     p=argparse.ArgumentParser(description="日本Amazon 利益商品発見システム"); sub=p.add_subparsers(dest="cmd",required=True)
-    sub.add_parser("doctor"); r=sub.add_parser("run-all"); r.add_argument("--mode",choices=["mock","live"],default="mock"); one=sub.add_parser("run"); one.add_argument("engine"); one.add_argument("--mode",choices=["mock","live"],default="mock"); sub.add_parser("resume"); sub.add_parser("status"); sub.add_parser("keepa-budget"); keepa_eval=sub.add_parser("keepa-evaluate"); keepa_eval.add_argument("asin")
+    sub.add_parser("doctor"); r=sub.add_parser("run-all"); r.add_argument("--mode",choices=["mock","live"],default="mock"); one=sub.add_parser("run"); one.add_argument("engine"); one.add_argument("--mode",choices=["mock","live"],default="mock"); sub.add_parser("resume"); sub.add_parser("status"); sub.add_parser("keepa-budget"); keepa_eval=sub.add_parser("keepa-evaluate"); keepa_eval.add_argument("asin"); opportunities=sub.add_parser("opportunities"); opportunities.add_argument("--mode",choices=["mock"],default="mock")
     a=p.parse_args(argv); settings=Settings.load(); db=Database(settings.db_path)
     if a.cmd=="doctor": return doctor(settings,db)
     if a.cmd=="status": return status(db)
     if a.cmd=="keepa-budget": return keepa_budget(db)
+    if a.cmd=="opportunities":
+        db.migrate(); items=OpportunityAggregator().aggregate(mock_signals(settings))
+        for item in items: db.save_opportunity(item)
+        report={"opportunity_count":len(items),"signal_count":sum(x.signal_count for x in items),"multi_signal_count":sum(x.signal_count>1 for x in items),"top_opportunities":[{"asin":x.asin,"name":x.product_name,"opportunity_score":x.opportunity_score,"urgency_score":x.urgency_score,"purchase_price":x.summary.purchase_price,"expected_profit":x.summary.expected_profit_yen,"roi":x.summary.roi,"signal_types":x.summary.signal_types,"reasons":x.reasons} for x in items[:10]]}
+        print(json.dumps(report,ensure_ascii=False,indent=2)); return 0
     if a.cmd=="keepa-evaluate":
         api_key=os.getenv("KEEPA_API_KEY")
         if not api_key:
