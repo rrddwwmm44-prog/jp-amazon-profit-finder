@@ -10,6 +10,7 @@ from app.providers.keepa import KeepaError, KeepaHttpError, KeepaProvider, Keepa
 from app.services.keepa_evaluation import evaluate_keepa_asin
 from app.opportunities.aggregator import OpportunityAggregator
 from app.opportunities.fixtures import mock_signals
+from app.virtual_purchases.fixtures import mock_virtual_purchases
 
 def engine_registry():
     registry=EngineRegistry(); registry.register(MarketPriceEngine()); registry.register(AmazonArbitrageEngine()); registry.register(SellerDeclineEngine()); return registry
@@ -35,7 +36,7 @@ def keepa_budget(db):
     db.migrate(); print(json.dumps(build_keepa_budget(db),ensure_ascii=False,indent=2)); return 0
 def main(argv=None):
     p=argparse.ArgumentParser(description="日本Amazon 利益商品発見システム"); sub=p.add_subparsers(dest="cmd",required=True)
-    sub.add_parser("doctor"); r=sub.add_parser("run-all"); r.add_argument("--mode",choices=["mock","live"],default="mock"); one=sub.add_parser("run"); one.add_argument("engine"); one.add_argument("--mode",choices=["mock","live"],default="mock"); sub.add_parser("resume"); sub.add_parser("status"); sub.add_parser("keepa-budget"); keepa_eval=sub.add_parser("keepa-evaluate"); keepa_eval.add_argument("asin"); opportunities=sub.add_parser("opportunities"); opportunities.add_argument("--mode",choices=["mock"],default="mock")
+    sub.add_parser("doctor"); r=sub.add_parser("run-all"); r.add_argument("--mode",choices=["mock","live"],default="mock"); one=sub.add_parser("run"); one.add_argument("engine"); one.add_argument("--mode",choices=["mock","live"],default="mock"); sub.add_parser("resume"); sub.add_parser("status"); sub.add_parser("keepa-budget"); keepa_eval=sub.add_parser("keepa-evaluate"); keepa_eval.add_argument("asin"); opportunities=sub.add_parser("opportunities"); opportunities.add_argument("--mode",choices=["mock"],default="mock"); virtual=sub.add_parser("virtual-purchases"); virtual.add_argument("--mode",choices=["mock"],default="mock")
     a=p.parse_args(argv); settings=Settings.load(); db=Database(settings.db_path)
     if a.cmd=="doctor": return doctor(settings,db)
     if a.cmd=="status": return status(db)
@@ -44,6 +45,13 @@ def main(argv=None):
         db.migrate(); items=OpportunityAggregator().aggregate(mock_signals(settings))
         for item in items: db.save_opportunity(item)
         report={"opportunity_count":len(items),"signal_count":sum(x.signal_count for x in items),"multi_signal_count":sum(x.signal_count>1 for x in items),"top_opportunities":[{"asin":x.asin,"name":x.product_name,"opportunity_score":x.opportunity_score,"urgency_score":x.urgency_score,"purchase_price":x.summary.purchase_price,"expected_profit":x.summary.expected_profit_yen,"roi":x.summary.roi,"signal_types":x.summary.signal_types,"reasons":x.reasons} for x in items[:10]]}
+        print(json.dumps(report,ensure_ascii=False,indent=2)); return 0
+    if a.cmd=="virtual-purchases":
+        db.migrate(); items=mock_virtual_purchases(settings)
+        for item in items: db.save_virtual_purchase(item)
+        statuses={name:sum(item.status.value==name for item in items) for name in ("OPEN","WIN","LOSS","EXPIRED")}
+        wins=[item.outcome.days_to_first_win for item in items if item.outcome.days_to_first_win is not None]
+        report={"total":len(items),"open":statuses["OPEN"],"win":statuses["WIN"],"loss":statuses["LOSS"],"expired":statuses["EXPIRED"],"average_days_to_win":round(sum(wins)/len(wins),2) if wins else None,"results":[{"asin":item.asin,"entry_price":item.summary.entry_price,"latest_price":item.summary.latest_price,"expected_profit":item.summary.expected_profit_yen,"status":item.status.value,"days_elapsed":item.summary.days_elapsed,"max_potential_profit":item.summary.max_potential_profit_yen,"signal_types":item.summary.signal_types} for item in items]}
         print(json.dumps(report,ensure_ascii=False,indent=2)); return 0
     if a.cmd=="keepa-evaluate":
         api_key=os.getenv("KEEPA_API_KEY")

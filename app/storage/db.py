@@ -89,3 +89,30 @@ class Database:
                     signal.confidence,signal.quality,signal.urgency_hint,
                     json.dumps(signal.evidence,ensure_ascii=False,separators=(",",":")),
                 ))
+    def save_virtual_purchase(self,purchase):
+        snapshot=json.dumps(asdict(purchase.entry_snapshot),ensure_ascii=False,separators=(",",":"))
+        outcome=json.dumps(asdict(purchase.outcome),ensure_ascii=False,separators=(",",":"))
+        summary=json.dumps(asdict(purchase.summary),ensure_ascii=False,separators=(",",":"))
+        entry=purchase.entry_snapshot
+        with self.connect() as c:
+            c.execute("""INSERT INTO virtual_purchases(
+                virtual_purchase_id,opportunity_id,opportunity_observed_at,asin,jan,product_name,
+                created_at,entry_price,expected_sale_price,expected_profit_yen,expected_roi,
+                opportunity_score,urgency_score,confidence,status,quantity,snapshot_json,outcome_json,summary_json
+            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            ON CONFLICT(virtual_purchase_id) DO UPDATE SET
+                status=excluded.status,outcome_json=excluded.outcome_json,summary_json=excluded.summary_json""",(
+                purchase.virtual_purchase_id,purchase.opportunity_id,entry.opportunity_observed_at,
+                purchase.asin,purchase.jan,purchase.product_name,purchase.created_at,entry.entry_price,
+                entry.expected_sale_price,entry.expected_profit_yen,entry.expected_roi,
+                entry.opportunity_score,entry.urgency_score,entry.confidence,purchase.status.value,
+                purchase.quantity,snapshot,outcome,summary,
+            ))
+            for observation in purchase.observations:
+                c.execute("""INSERT OR IGNORE INTO virtual_purchase_observations(
+                    virtual_purchase_id,observed_at,observed_price,sales_rank,new_offer_count,amazon_owned,data_quality
+                ) VALUES(?,?,?,?,?,?,?)""",(
+                    observation.virtual_purchase_id,observation.observed_at,observation.observed_price,
+                    observation.sales_rank,observation.new_offer_count,
+                    None if observation.amazon_owned is None else int(observation.amazon_owned),observation.data_quality,
+                ))

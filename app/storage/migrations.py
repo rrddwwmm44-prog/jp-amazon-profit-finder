@@ -94,6 +94,28 @@ MIGRATIONS = (
         )""",
         "CREATE INDEX IF NOT EXISTS idx_opportunity_signals_opportunity ON opportunity_signals(opportunity_id)",
     )),
+    Migration(5, "005_virtual_purchases", (
+        """CREATE TABLE IF NOT EXISTS virtual_purchases(
+            virtual_purchase_id TEXT PRIMARY KEY, opportunity_id TEXT NOT NULL,
+            opportunity_observed_at TEXT NOT NULL, asin TEXT, jan TEXT, product_name TEXT,
+            created_at TEXT NOT NULL, entry_price REAL NOT NULL,
+            expected_sale_price REAL NOT NULL, expected_profit_yen REAL,
+            expected_roi REAL, opportunity_score INTEGER NOT NULL,
+            urgency_score INTEGER, confidence INTEGER, status TEXT NOT NULL,
+            quantity INTEGER NOT NULL, snapshot_json TEXT NOT NULL,
+            outcome_json TEXT NOT NULL, summary_json TEXT NOT NULL,
+            UNIQUE(opportunity_id, opportunity_observed_at)
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_virtual_purchases_status ON virtual_purchases(status, created_at)",
+        """CREATE TABLE IF NOT EXISTS virtual_purchase_observations(
+            id INTEGER PRIMARY KEY, virtual_purchase_id TEXT NOT NULL,
+            observed_at TEXT NOT NULL, observed_price REAL, sales_rank INTEGER,
+            new_offer_count INTEGER, amazon_owned INTEGER, data_quality TEXT,
+            UNIQUE(virtual_purchase_id, observed_at),
+            FOREIGN KEY(virtual_purchase_id) REFERENCES virtual_purchases(virtual_purchase_id)
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_virtual_purchase_observations_purchase ON virtual_purchase_observations(virtual_purchase_id, observed_at)",
+    )),
 )
 
 
