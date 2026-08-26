@@ -91,7 +91,7 @@ class KeepaEvaluationTests(unittest.TestCase):
             self.assertFalse(report["seller_decline"]["candidate"])
 
     def test_cli_rejects_missing_key_without_network(self):
-        with tempfile.TemporaryDirectory() as raw, patch.dict(os.environ,{"APP_DB_PATH":str(Path(raw)/"no-key.db")},clear=True), redirect_stderr(io.StringIO()) as error:
+        with tempfile.TemporaryDirectory() as raw, patch("app.config._load_dotenv"), patch.dict(os.environ,{"APP_DB_PATH":str(Path(raw)/"no-key.db")},clear=True), redirect_stderr(io.StringIO()) as error:
             self.assertEqual(main(["keepa-evaluate",ASIN]),2)
             self.assertIn("not configured",error.getvalue())
 

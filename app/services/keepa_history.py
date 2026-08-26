@@ -24,7 +24,7 @@ class HistoryQuality(StrEnum):
 @dataclass(frozen=True)
 class HistoryPoint:
     observed_at: datetime
-    value: int
+    value: int | None
 
 
 @dataclass(frozen=True)
@@ -64,18 +64,19 @@ def decode_history(values: Any, *, stride: int = 2, allow_zero: bool = False) ->
         stamp, value = values[index], values[index + 1]
         if not isinstance(stamp, int) or not isinstance(value, int):
             continue
-        if value < 0 or (value == 0 and not allow_zero):
-            continue
-        points.append(HistoryPoint(keepa_time_to_datetime(stamp), value))
+        normalized = None if value < 0 or (value == 0 and not allow_zero) else value
+        points.append(HistoryPoint(keepa_time_to_datetime(stamp), normalized))
     return tuple(sorted(points, key=lambda point: point.observed_at))
 
 
-def point_in_time(points: tuple[HistoryPoint, ...], target: datetime, max_gap_days: int) -> int | None:
+def point_in_time(
+    points: tuple[HistoryPoint, ...], target: datetime, max_gap_days: int | None = None,
+) -> int | None:
     eligible = [point for point in points if point.observed_at <= target]
     if not eligible:
         return None
     selected = eligible[-1]
-    if target - selected.observed_at > timedelta(days=max_gap_days):
+    if max_gap_days is not None and target - selected.observed_at > timedelta(days=max_gap_days):
         return None
     return selected.value
 
@@ -83,8 +84,12 @@ def point_in_time(points: tuple[HistoryPoint, ...], target: datetime, max_gap_da
 def window_median(
     points: tuple[HistoryPoint, ...], observed_at: datetime, days: int, minimum_samples: int
 ) -> float | None:
-    start = observed_at - timedelta(days=days)
-    samples = [point.value for point in points if start <= point.observed_at <= observed_at]
+    # Keepa only appends a point when the value changes, so sample the
+    # step-function daily instead of weighting change events equally.
+    samples = [
+        value for day in range(days + 1)
+        if (value := point_in_time(points, observed_at - timedelta(days=day))) is not None
+    ]
     if len(samples) < minimum_samples:
         return None
     return float(median(samples))
@@ -102,11 +107,17 @@ def normalize_keepa_history(
     new_offers = decode_history(_csv(csv, CSV_NEW_OFFER_COUNT), allow_zero=True)
     buy_box = decode_history(_csv(csv, CSV_BUY_BOX_SHIPPING), stride=3)
 
-    def at(points: tuple[HistoryPoint, ...], days: int = 0) -> int | None:
-        return point_in_time(points, observed_at - timedelta(days=days), max_gap_days)
+    # max_gap_days is retained in the public signature for compatibility. Keepa
+    # histories are change-point series and therefore must not expire by age.
+    _ = max_gap_days
 
-    current_price = at(marketplace_new)
-    amazon_price = at(amazon)
+    def at(points: tuple[HistoryPoint, ...], days: int = 0) -> int | None:
+        return point_in_time(points, observed_at - timedelta(days=days))
+
+    stats = raw.get("stats") if isinstance(raw.get("stats"), dict) else {}
+    current = stats.get("current")
+    current_price = _current_value(current, CSV_MARKETPLACE_NEW, fallback=at(marketplace_new))
+    amazon_price = _current_value(current, CSV_AMAZON, fallback=at(amazon))
     availability = raw.get("availabilityAmazon")
     if availability == -1:
         amazon_owned: bool | None = False
@@ -131,9 +142,9 @@ def normalize_keepa_history(
         price_7d=at(marketplace_new, 7), price_30d=at(marketplace_new, 30), price_90d=at(marketplace_new, 90),
         median_price_30d=window_median(marketplace_new, observed_at, 30, minimum_median_samples),
         median_price_90d=window_median(marketplace_new, observed_at, 90, minimum_median_samples),
-        current_sales_rank=at(sales_rank), sales_rank_7d=at(sales_rank, 7),
+        current_sales_rank=_current_value(current, CSV_SALES_RANK, fallback=at(sales_rank)), sales_rank_7d=at(sales_rank, 7),
         sales_rank_30d=at(sales_rank, 30), sales_rank_90d=at(sales_rank, 90),
-        current_new_offer_count=at(new_offers), new_offer_count_7d=at(new_offers, 7),
+        current_new_offer_count=_current_value(current, CSV_NEW_OFFER_COUNT, fallback=at(new_offers), allow_zero=True), new_offer_count_7d=at(new_offers, 7),
         new_offer_count_30d=at(new_offers, 30), new_offer_count_90d=at(new_offers, 90),
         amazon_price_current=amazon_price, buy_box_price_current=at(buy_box),
         amazon_owned_current=amazon_owned, quality=quality,
@@ -142,3 +153,10 @@ def normalize_keepa_history(
 
 def _csv(csv: list[Any], index: int) -> Any:
     return csv[index] if len(csv) > index else None
+
+
+def _current_value(values: Any, index: int, *, fallback: int | None, allow_zero: bool = False) -> int | None:
+    if not isinstance(values, list) or len(values) <= index or not isinstance(values[index], int):
+        return fallback
+    value = values[index]
+    return value if value > 0 or (allow_zero and value == 0) else None
