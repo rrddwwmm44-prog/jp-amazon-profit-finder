@@ -69,6 +69,7 @@ class Settings:
     virtual_track_limited_max_asins: int = 5
     virtual_track_critical_max_asins: int = 1
     virtual_track_unknown_bootstrap_max_asins: int = 1
+    job_lock_dir: Path = Path("data/locks")
 
     @classmethod
     def load(cls) -> "Settings":
@@ -98,4 +99,5 @@ class Settings:
             virtual_track_limited_max_asins=int(os.getenv("VIRTUAL_TRACK_LIMITED_MAX_ASINS","5")),
             virtual_track_critical_max_asins=int(os.getenv("VIRTUAL_TRACK_CRITICAL_MAX_ASINS","1")),
             virtual_track_unknown_bootstrap_max_asins=int(os.getenv("VIRTUAL_TRACK_UNKNOWN_BOOTSTRAP_MAX_ASINS","1")),
+            job_lock_dir=Path(os.getenv("APP_LOCK_DIR","data/locks")),
         )

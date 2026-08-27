@@ -11,6 +11,7 @@ data/*.db
 data/**/*.db
 data/**/*.db-*
 data/exports/*
+data/locks/
 logs/
 *.log
 .DS_Store

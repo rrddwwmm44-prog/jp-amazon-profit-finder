@@ -17,6 +17,7 @@ from app.strategy_performance.fixtures import mock_performance_samples
 from app.strategy_performance.service import StrategyPerformanceService
 from app.virtual_purchases.tracking import VirtualPurchaseTrackingService
 from app.providers.keepa import KeepaProduct, KeepaResult
+from app.services.job_lock import JobLock
 
 def engine_registry():
     registry=EngineRegistry(); registry.register(MarketPriceEngine()); registry.register(AmazonArbitrageEngine()); registry.register(SellerDeclineEngine()); return registry
@@ -66,25 +67,32 @@ def main(argv=None):
         output={"overall":asdict(report.overall),"strategies":[asdict(item) for item in report.strategies],"score_buckets":[asdict(item) for item in report.score_buckets],"signal_count":[asdict(item) for item in report.signal_count_buckets],"amazon_owned":[asdict(item) for item in report.amazon_owned_buckets],"sales_rank":[asdict(item) for item in report.sales_rank_buckets],"new_offer_count":[asdict(item) for item in report.new_offer_count_buckets],"fee_source":report.fee_source,"fee_model_version":report.fee_model_version}
         print(json.dumps(output,ensure_ascii=False,indent=2)); return 0
     if a.cmd=="track-virtual-purchases":
-        db.migrate()
-        if a.mode=="mock":
-            for item in mock_virtual_purchases(settings): db.save_virtual_purchase(item)
-            class CachedMockProvider:
-                def get_product(self,asin):
-                    now=datetime.now(timezone.utc).isoformat()
-                    return KeepaResult(KeepaProduct(asin,5,"amazon.co.jp","mock",5500,None,12000,4,now),None,True,None)
-            provider=CachedMockProvider()
-        else:
-            api_key=os.getenv("KEEPA_API_KEY")
-            if not api_key and not a.dry_run:
-                print("Keepa API key is not configured",file=sys.stderr); return 2
-            provider=None if a.dry_run else KeepaProvider(
-                api_key or "",db=db,cache_ttl_seconds=settings.keepa_cache_ttl_seconds,
-                history_max_gap_days=settings.keepa_history_max_gap_days,
-                history_minimum_median_samples=settings.keepa_history_minimum_median_samples,
-            )
-        report=VirtualPurchaseTrackingService(settings,db,provider).run(dry_run=a.dry_run)
-        print(json.dumps(report.to_dict(),ensure_ascii=False,indent=2)); return 0
+        lock=JobLock(settings.job_lock_dir,"track-virtual-purchases")
+        acquired=lock.acquire()
+        if not acquired.acquired:
+            print(json.dumps({"status":"already_running","job":"track-virtual-purchases","existing_pid":acquired.existing.pid if acquired.existing else None},ensure_ascii=False,indent=2)); return 0
+        try:
+            db.migrate()
+            if a.mode=="mock":
+                for item in mock_virtual_purchases(settings): db.save_virtual_purchase(item)
+                class CachedMockProvider:
+                    def get_product(self,asin):
+                        now=datetime.now(timezone.utc).isoformat()
+                        return KeepaResult(KeepaProduct(asin,5,"amazon.co.jp","mock",5500,None,12000,4,now),None,True,None)
+                provider=CachedMockProvider()
+            else:
+                api_key=os.getenv("KEEPA_API_KEY")
+                if not api_key and not a.dry_run:
+                    print("Keepa API key is not configured",file=sys.stderr); return 2
+                provider=None if a.dry_run else KeepaProvider(
+                    api_key or "",db=db,cache_ttl_seconds=settings.keepa_cache_ttl_seconds,
+                    history_max_gap_days=settings.keepa_history_max_gap_days,
+                    history_minimum_median_samples=settings.keepa_history_minimum_median_samples,
+                )
+            report=VirtualPurchaseTrackingService(settings,db,provider).run(dry_run=a.dry_run)
+            print(json.dumps(report.to_dict(),ensure_ascii=False,indent=2)); return 0
+        finally:
+            lock.release()
     if a.cmd=="keepa-evaluate":
         api_key=os.getenv("KEEPA_API_KEY")
         if not api_key:
