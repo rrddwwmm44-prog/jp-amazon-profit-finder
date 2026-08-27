@@ -6,7 +6,7 @@ from hashlib import sha256
 
 from app.config import Settings
 from app.opportunities.models import Opportunity, OpportunityStatus
-from app.services.profit_calculator import calculate
+from app.services.profit_calculator import CalculationContext, FeeModel, FeeSource, FulfillmentMethod, calculate
 from app.virtual_purchases.models import (
     EntrySnapshot, FollowUpObservation, VirtualPurchase, VirtualPurchaseEligibility,
     VirtualPurchaseOutcome, VirtualPurchaseStatus, VirtualPurchaseSummary,
@@ -14,9 +14,10 @@ from app.virtual_purchases.models import (
 
 
 class VirtualPurchaseService:
-    def __init__(self, settings: Settings, evaluation_days: int = 30):
+    def __init__(self, settings: Settings, evaluation_days: int = 30, fee_model: FeeModel | None = None):
         self.settings=settings
         self.evaluation_days=evaluation_days
+        self.fee_model=fee_model or FeeModel()
 
     def eligibility(self, opportunity: Opportunity) -> VirtualPurchaseEligibility:
         reasons=[]
@@ -31,12 +32,17 @@ class VirtualPurchaseService:
         if quantity < 1: raise ValueError("quantity_must_be_positive")
         created_at=created_at or datetime.now(timezone.utc).isoformat()
         summary=opportunity.summary
+        context=CalculationContext(opportunity.asin,None,FulfillmentMethod.UNKNOWN,summary.expected_sale_price,summary.purchase_price)
+        entry_result=calculate(summary.expected_sale_price,summary.purchase_price,fee_model=self.fee_model,context=context)
         snapshot=EntrySnapshot(
             opportunity.observed_at,float(summary.purchase_price),float(summary.expected_sale_price),
-            summary.expected_profit_yen,summary.roi,opportunity.opportunity_score,
+            entry_result.profit_yen,entry_result.roi,opportunity.opportunity_score,
             opportunity.urgency_score,opportunity.confidence,summary.signal_types,
             summary.sales_rank,summary.new_offer_count,summary.amazon_owned,
             summary.median_price_30d,summary.median_price_90d,opportunity.reasons,opportunity.risks,
+            self.fee_model.referral_rate,entry_result.referral_fee,entry_result.fulfillment_fee,
+            entry_result.shipping_cost,entry_result.other_cost,entry_result.total_fees,
+            entry_result.fee_source.value,entry_result.fee_model_version,entry_result.calculated_at,
         )
         identity=f"{opportunity.opportunity_id}:{opportunity.observed_at}"
         virtual_id=sha256(identity.encode()).hexdigest()[:24]
@@ -63,7 +69,13 @@ class VirtualPurchaseService:
         as_of=as_of or datetime.now(timezone.utc).isoformat()
         elapsed=max(0,(_parse(as_of)-_parse(purchase.created_at)).days)
         priced=[item for item in purchase.observations if item.observed_price is not None and item.observed_price > 0]
-        calculations=[(item,calculate(item.observed_price,purchase.entry_snapshot.entry_price)) for item in priced]
+        snapshot=purchase.entry_snapshot
+        fee_model=FeeModel(
+            snapshot.referral_rate,snapshot.fulfillment_fee,snapshot.shipping_cost,snapshot.other_cost,
+            FeeSource(snapshot.fee_source),snapshot.fee_model_version,snapshot.fee_calculated_at,
+        )
+        context=CalculationContext(purchase.asin,None,FulfillmentMethod.UNKNOWN,purchase_price=snapshot.entry_price)
+        calculations=[(item,calculate(item.observed_price,snapshot.entry_price,fee_model=fee_model,context=context)) for item in priced]
         wins=[(item,result) for item,result in calculations if result.profit_yen >= self.settings.min_arbitrage_profit_yen and result.roi >= self.settings.min_arbitrage_roi]
         if wins: status=VirtualPurchaseStatus.WIN
         elif elapsed < self.evaluation_days: status=VirtualPurchaseStatus.OPEN
@@ -79,7 +91,7 @@ class VirtualPurchaseService:
             max_result.roi if max_result else None,days_to_win,elapsed,
         )
         latest=max(purchase.observations,key=lambda item:item.observed_at,default=None)
-        latest_calc=calculate(latest.observed_price,purchase.entry_snapshot.entry_price) if latest and latest.observed_price is not None and latest.observed_price > 0 else None
+        latest_calc=calculate(latest.observed_price,snapshot.entry_price,fee_model=fee_model,context=context) if latest and latest.observed_price is not None and latest.observed_price > 0 else None
         summary=VirtualPurchaseSummary(
             purchase.product_name,purchase.asin,purchase.entry_snapshot.entry_price,
             latest.observed_price if latest else None,purchase.entry_snapshot.expected_profit_yen,

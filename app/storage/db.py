@@ -99,7 +99,8 @@ class Database:
                 virtual_purchase_id,opportunity_id,opportunity_observed_at,asin,jan,product_name,
                 created_at,entry_price,expected_sale_price,expected_profit_yen,expected_roi,
                 opportunity_score,urgency_score,confidence,status,quantity,snapshot_json,outcome_json,summary_json
-            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                ,fee_source,fee_model_version,referral_fee,fulfillment_fee,total_fees
+            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             ON CONFLICT(virtual_purchase_id) DO UPDATE SET
                 status=excluded.status,outcome_json=excluded.outcome_json,summary_json=excluded.summary_json""",(
                 purchase.virtual_purchase_id,purchase.opportunity_id,entry.opportunity_observed_at,
@@ -107,6 +108,8 @@ class Database:
                 entry.expected_sale_price,entry.expected_profit_yen,entry.expected_roi,
                 entry.opportunity_score,entry.urgency_score,entry.confidence,purchase.status.value,
                 purchase.quantity,snapshot,outcome,summary,
+                entry.fee_source,entry.fee_model_version,entry.referral_fee,
+                entry.fulfillment_fee,entry.total_fees,
             ))
             for observation in purchase.observations:
                 c.execute("""INSERT OR IGNORE INTO virtual_purchase_observations(

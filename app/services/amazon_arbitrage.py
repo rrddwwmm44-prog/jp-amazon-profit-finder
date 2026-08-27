@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from app.config import Settings
 from app.domain import ProductSignal
 from app.services.confidence import assess
-from app.services.profit_calculator import ProfitResult, calculate
+from app.services.profit_calculator import CalculationContext, FeeModel, FulfillmentMethod, ProfitResult, calculate
 
 
 @dataclass(frozen=True)
@@ -49,12 +49,13 @@ def expected_sale_price(item: ArbitrageInput) -> float | None:
     return conservative if conservative > item.purchase_price else None
 
 
-def evaluate_arbitrage(item: ArbitrageInput, settings: Settings) -> ArbitrageAssessment:
+def evaluate_arbitrage(item: ArbitrageInput, settings: Settings, fee_model: FeeModel | None = None) -> ArbitrageAssessment:
     expected=expected_sale_price(item)
     purchase=item.purchase_price
     absolute_drop=round(expected-purchase,2) if expected is not None and purchase is not None else None
     drop_rate=round(absolute_drop/expected,4) if absolute_drop is not None and expected else None
-    profit=calculate(expected,purchase) if expected is not None and purchase is not None else None
+    context=CalculationContext(item.asin,None,FulfillmentMethod.UNKNOWN,expected,purchase)
+    profit=calculate(expected,purchase,fee_model=fee_model,context=context) if expected is not None and purchase is not None else None
     rejects=[]
     if expected is None: rejects.append("missing_expected_sale_price")
     if profit is not None and profit.profit_yen < settings.min_arbitrage_profit_yen: rejects.append("insufficient_profit")
@@ -73,6 +74,11 @@ def evaluate_arbitrage(item: ArbitrageInput, settings: Settings) -> ArbitrageAss
         "purchase_price":purchase,"expected_sale_price":expected,"absolute_drop_yen":absolute_drop,
         "drop_rate":drop_rate,"profit_yen":profit.profit_yen if profit else None,
         "roi":profit.roi if profit else None,"sales_rank":item.sales_rank,
+        "referral_fee":profit.referral_fee if profit else None,
+        "fulfillment_fee":profit.fulfillment_fee if profit else None,
+        "total_fees":profit.total_fees if profit else None,
+        "fee_source":profit.fee_source.value if profit else None,
+        "fee_model_version":profit.fee_model_version if profit else None,
         "new_offer_count":item.new_offer_count,"amazon_owned":item.amazon_owned,
         "amazon_owned_return_risk":item.amazon_owned is True,"missing":missing,
     }

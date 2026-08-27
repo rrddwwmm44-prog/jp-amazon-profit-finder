@@ -116,6 +116,14 @@ MIGRATIONS = (
         )""",
         "CREATE INDEX IF NOT EXISTS idx_virtual_purchase_observations_purchase ON virtual_purchase_observations(virtual_purchase_id, observed_at)",
     )),
+    Migration(6, "006_profit_fee_model", (
+        "ALTER TABLE virtual_purchases ADD COLUMN fee_source TEXT NOT NULL DEFAULT 'DEFAULT_ESTIMATE'",
+        "ALTER TABLE virtual_purchases ADD COLUMN fee_model_version TEXT NOT NULL DEFAULT 'estimate_v1'",
+        "ALTER TABLE virtual_purchases ADD COLUMN referral_fee REAL",
+        "ALTER TABLE virtual_purchases ADD COLUMN fulfillment_fee REAL",
+        "ALTER TABLE virtual_purchases ADD COLUMN total_fees REAL",
+        "CREATE INDEX IF NOT EXISTS idx_virtual_purchases_fee_model ON virtual_purchases(fee_source, fee_model_version)",
+    )),
 )
 
 

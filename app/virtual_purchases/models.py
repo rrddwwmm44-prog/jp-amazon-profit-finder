@@ -29,6 +29,15 @@ class EntrySnapshot:
     median_price_90d: float | None
     reasons: tuple[str, ...]
     risks: tuple[str, ...]
+    referral_rate: float
+    referral_fee: float
+    fulfillment_fee: float
+    shipping_cost: float
+    other_cost: float
+    total_fees: float
+    fee_source: str
+    fee_model_version: str
+    fee_calculated_at: str
 
 
 @dataclass(frozen=True)
