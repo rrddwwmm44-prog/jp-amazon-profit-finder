@@ -64,6 +64,11 @@ class Settings:
     max_arbitrage_new_offer_count: int = 15
     min_seller_decline_rate_30d: float = 0.30
     min_seller_decline_score: int = 60
+    virtual_purchase_track_interval_hours: int = 24
+    virtual_track_max_asins_per_run: int = 20
+    virtual_track_limited_max_asins: int = 5
+    virtual_track_critical_max_asins: int = 1
+    virtual_track_unknown_bootstrap_max_asins: int = 1
 
     @classmethod
     def load(cls) -> "Settings":
@@ -88,4 +93,9 @@ class Settings:
             )),
             min_seller_decline_rate_30d=float(os.getenv("MIN_SELLER_DECLINE_RATE_30D","0.30")),
             min_seller_decline_score=int(os.getenv("MIN_SELLER_DECLINE_SCORE","60")),
+            virtual_purchase_track_interval_hours=int(os.getenv("VIRTUAL_PURCHASE_TRACK_INTERVAL_HOURS","24")),
+            virtual_track_max_asins_per_run=int(os.getenv("VIRTUAL_TRACK_MAX_ASINS_PER_RUN","20")),
+            virtual_track_limited_max_asins=int(os.getenv("VIRTUAL_TRACK_LIMITED_MAX_ASINS","5")),
+            virtual_track_critical_max_asins=int(os.getenv("VIRTUAL_TRACK_CRITICAL_MAX_ASINS","1")),
+            virtual_track_unknown_bootstrap_max_asins=int(os.getenv("VIRTUAL_TRACK_UNKNOWN_BOOTSTRAP_MAX_ASINS","1")),
         )

@@ -119,3 +119,42 @@ class Database:
                     observation.sales_rank,observation.new_offer_count,
                     None if observation.amazon_owned is None else int(observation.amazon_owned),observation.data_quality,
                 ))
+    def load_virtual_purchases(self,status=None):
+        from app.virtual_purchases.models import EntrySnapshot, FollowUpObservation, VirtualPurchase, VirtualPurchaseOutcome, VirtualPurchaseStatus, VirtualPurchaseSummary
+        where=" WHERE status=?" if status is not None else ""
+        params=(status.value if hasattr(status,"value") else status,) if status is not None else ()
+        with self.connect() as c:
+            rows=c.execute("SELECT * FROM virtual_purchases"+where+" ORDER BY created_at,virtual_purchase_id",params).fetchall()
+            result=[]
+            for row in rows:
+                snapshot_data=json.loads(row["snapshot_json"])
+                snapshot_data["signal_types"]=tuple(snapshot_data.get("signal_types") or ())
+                snapshot_data["reasons"]=tuple(snapshot_data.get("reasons") or ())
+                snapshot_data["risks"]=tuple(snapshot_data.get("risks") or ())
+                # v5 snapshots predate fee versioning. Their calculation was the
+                # fixed 10% + 450 yen DEFAULT_ESTIMATE model.
+                snapshot_data.setdefault("referral_rate",0.10)
+                snapshot_data.setdefault("referral_fee",row["referral_fee"] if row["referral_fee"] is not None else float(row["expected_sale_price"])*0.10)
+                snapshot_data.setdefault("fulfillment_fee",row["fulfillment_fee"] if row["fulfillment_fee"] is not None else 450.0)
+                snapshot_data.setdefault("shipping_cost",0.0)
+                snapshot_data.setdefault("other_cost",0.0)
+                snapshot_data.setdefault("total_fees",row["total_fees"] if row["total_fees"] is not None else snapshot_data["referral_fee"]+snapshot_data["fulfillment_fee"])
+                snapshot_data.setdefault("fee_source",row["fee_source"])
+                snapshot_data.setdefault("fee_model_version",row["fee_model_version"])
+                snapshot_data.setdefault("fee_calculated_at",row["created_at"])
+                outcome_data=json.loads(row["outcome_json"])
+                outcome_data["outcome_status"]=VirtualPurchaseStatus(outcome_data["outcome_status"])
+                summary_data=json.loads(row["summary_json"])
+                summary_data["signal_types"]=tuple(summary_data.get("signal_types") or ())
+                summary_data["status"]=VirtualPurchaseStatus(summary_data["status"])
+                observations=tuple(FollowUpObservation(
+                    item["virtual_purchase_id"],item["observed_at"],item["observed_price"],
+                    item["sales_rank"],item["new_offer_count"],
+                    None if item["amazon_owned"] is None else bool(item["amazon_owned"]),item["data_quality"],
+                ) for item in c.execute("SELECT * FROM virtual_purchase_observations WHERE virtual_purchase_id=? ORDER BY observed_at",(row["virtual_purchase_id"],)))
+                result.append(VirtualPurchase(
+                    row["virtual_purchase_id"],row["opportunity_id"],row["asin"],row["jan"],row["product_name"],
+                    row["created_at"],row["quantity"],VirtualPurchaseStatus(row["status"]),EntrySnapshot(**snapshot_data),
+                    observations,VirtualPurchaseOutcome(**outcome_data),VirtualPurchaseSummary(**summary_data),
+                ))
+        return result

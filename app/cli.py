@@ -1,6 +1,7 @@
 from __future__ import annotations
 import argparse, json, os, platform, sqlite3, sys
 from dataclasses import asdict
+from datetime import datetime, timezone
 from pathlib import Path
 from app.config import Settings
 from app.storage.db import Database
@@ -14,6 +15,8 @@ from app.opportunities.fixtures import mock_signals
 from app.virtual_purchases.fixtures import mock_virtual_purchases
 from app.strategy_performance.fixtures import mock_performance_samples
 from app.strategy_performance.service import StrategyPerformanceService
+from app.virtual_purchases.tracking import VirtualPurchaseTrackingService
+from app.providers.keepa import KeepaProduct, KeepaResult
 
 def engine_registry():
     registry=EngineRegistry(); registry.register(MarketPriceEngine()); registry.register(AmazonArbitrageEngine()); registry.register(SellerDeclineEngine()); return registry
@@ -39,7 +42,7 @@ def keepa_budget(db):
     db.migrate(); print(json.dumps(build_keepa_budget(db),ensure_ascii=False,indent=2)); return 0
 def main(argv=None):
     p=argparse.ArgumentParser(description="日本Amazon 利益商品発見システム"); sub=p.add_subparsers(dest="cmd",required=True)
-    sub.add_parser("doctor"); r=sub.add_parser("run-all"); r.add_argument("--mode",choices=["mock","live"],default="mock"); one=sub.add_parser("run"); one.add_argument("engine"); one.add_argument("--mode",choices=["mock","live"],default="mock"); sub.add_parser("resume"); sub.add_parser("status"); sub.add_parser("keepa-budget"); keepa_eval=sub.add_parser("keepa-evaluate"); keepa_eval.add_argument("asin"); opportunities=sub.add_parser("opportunities"); opportunities.add_argument("--mode",choices=["mock"],default="mock"); virtual=sub.add_parser("virtual-purchases"); virtual.add_argument("--mode",choices=["mock"],default="mock"); performance=sub.add_parser("strategy-performance"); performance.add_argument("--mode",choices=["mock"],default="mock")
+    sub.add_parser("doctor"); r=sub.add_parser("run-all"); r.add_argument("--mode",choices=["mock","live"],default="mock"); one=sub.add_parser("run"); one.add_argument("engine"); one.add_argument("--mode",choices=["mock","live"],default="mock"); sub.add_parser("resume"); sub.add_parser("status"); sub.add_parser("keepa-budget"); keepa_eval=sub.add_parser("keepa-evaluate"); keepa_eval.add_argument("asin"); opportunities=sub.add_parser("opportunities"); opportunities.add_argument("--mode",choices=["mock"],default="mock"); virtual=sub.add_parser("virtual-purchases"); virtual.add_argument("--mode",choices=["mock"],default="mock"); performance=sub.add_parser("strategy-performance"); performance.add_argument("--mode",choices=["mock"],default="mock"); tracking=sub.add_parser("track-virtual-purchases"); tracking.add_argument("--mode",choices=["mock","live"],default="live"); tracking.add_argument("--dry-run",action="store_true")
     a=p.parse_args(argv); settings=Settings.load(); db=Database(settings.db_path)
     if a.cmd=="doctor": return doctor(settings,db)
     if a.cmd=="status": return status(db)
@@ -62,6 +65,26 @@ def main(argv=None):
         report=reports[0]
         output={"overall":asdict(report.overall),"strategies":[asdict(item) for item in report.strategies],"score_buckets":[asdict(item) for item in report.score_buckets],"signal_count":[asdict(item) for item in report.signal_count_buckets],"amazon_owned":[asdict(item) for item in report.amazon_owned_buckets],"sales_rank":[asdict(item) for item in report.sales_rank_buckets],"new_offer_count":[asdict(item) for item in report.new_offer_count_buckets],"fee_source":report.fee_source,"fee_model_version":report.fee_model_version}
         print(json.dumps(output,ensure_ascii=False,indent=2)); return 0
+    if a.cmd=="track-virtual-purchases":
+        db.migrate()
+        if a.mode=="mock":
+            for item in mock_virtual_purchases(settings): db.save_virtual_purchase(item)
+            class CachedMockProvider:
+                def get_product(self,asin):
+                    now=datetime.now(timezone.utc).isoformat()
+                    return KeepaResult(KeepaProduct(asin,5,"amazon.co.jp","mock",5500,None,12000,4,now),None,True,None)
+            provider=CachedMockProvider()
+        else:
+            api_key=os.getenv("KEEPA_API_KEY")
+            if not api_key and not a.dry_run:
+                print("Keepa API key is not configured",file=sys.stderr); return 2
+            provider=None if a.dry_run else KeepaProvider(
+                api_key or "",db=db,cache_ttl_seconds=settings.keepa_cache_ttl_seconds,
+                history_max_gap_days=settings.keepa_history_max_gap_days,
+                history_minimum_median_samples=settings.keepa_history_minimum_median_samples,
+            )
+        report=VirtualPurchaseTrackingService(settings,db,provider).run(dry_run=a.dry_run)
+        print(json.dumps(report.to_dict(),ensure_ascii=False,indent=2)); return 0
     if a.cmd=="keepa-evaluate":
         api_key=os.getenv("KEEPA_API_KEY")
         if not api_key:
