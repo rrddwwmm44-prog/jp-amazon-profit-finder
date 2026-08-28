@@ -1,6 +1,6 @@
 # STATUS
 
-current_phase: Initial five-Seller BASELINE completed; Scheduler activation stopped on LIMITED budget
+current_phase: Initial five-Seller BASELINE accepted; daily Scheduler enabled at 05:15
 
 completed:
 - External Brain connected
@@ -10,6 +10,8 @@ completed:
 - Seller Monitor -> Signal -> Opportunity -> Virtual Purchase pipeline implemented in existing history
 - Daily orchestration and safe task-registration scripts implemented
 - Initial five-Seller Live BASELINE completed successfully: 1,419 ASINs, zero NEW detections, Signals, Opportunities, or Virtual Purchases
+- Keepa Budget Manager corrected for the 60-minute token bucket; five-Seller dry-run plans all five Sellers
+- Seller Monitor daily Windows task registered and enabled for 05:15; Virtual Purchase tracking remains at 06:00
 
 tests:
 - 230 unittest cases passed on 2026-08-28
@@ -17,17 +19,17 @@ tests:
 - Initial BASELINE used 5 storefront requests and 50 Keepa tokens; no 429 or exhaustion occurred
 
 open_items:
-- Resolve the post-BASELINE LIMITED budget state before registering or enabling the 05:15 daily Windows task
-- Confirm a cadence/token plan that can check all five enabled Sellers rather than the current LIMITED one-Seller plan
+- Audit the first scheduled Seller Monitor daily run after 05:15 without triggering a duplicate Live run
 
 important_decisions:
 - Project Knowledge isolated under seller-monitor
 - Preserve the existing Seller Monitor -> Signal -> Opportunity -> Virtual Purchase integration direction
 - External Brain is optional memory and never replaces SQLite, migrations, budget controls, job locks, or local safety rules
 - Keepa storefront data may be incomplete, delayed, and include ASINs seen within the previous seven days
-- Do not enable the daily Scheduler when the current budget plan cannot cover all intended Sellers
+- Treat the initial 1,419-ASIN five-Seller run as the formal successful BASELINE; do not repeat it
+- Evaluate short Keepa bursts against the 60-minute token bucket while retaining sustained-rate and exhaustion protections
 - Do not store API keys, .env contents, real Seller IDs, SQLite data, logs, or CSV contents in STATE or Knowledge
 
-next_action: Review the Keepa cadence/token capacity for five daily storefront checks; keep the Seller Monitor Scheduler unregistered until approved
+next_action: After the first 05:15 scheduled run, audit only the existing task result, logs, and database
 
 last_updated: 2026-08-29

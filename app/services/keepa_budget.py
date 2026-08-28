@@ -10,7 +10,8 @@ from app.storage.db import Database
 CRITICAL_TOKENS_LEFT = 5
 LIMITED_TOKENS_LEFT = 20
 MIN_REQUIRED_EVENTS = 2
-MIN_OBSERVATION_SECONDS = 60
+MIN_OBSERVATION_SECONDS = 60 * 60
+TOKEN_EXPIRY_MINUTES = 60
 
 
 def _parse(value: str) -> datetime:
@@ -97,30 +98,46 @@ def build_keepa_budget(db: Database, now: datetime | None = None) -> dict:
     refill=last["refill_rate"] if last else None
     reduction=(last["token_flow_reduction"] or 0) if last else None
     capacity=max(0.0,refill-reduction) if refill is not None else None
+    bucket_capacity=capacity*TOKEN_EXPIRY_MINUTES if capacity is not None else None
+    observed_tokens_left=last["tokens_left"] if last else None
+    if last is None or observed_tokens_left is None or bucket_capacity is None:
+        estimated_tokens_left=None
+    else:
+        elapsed_minutes=max(0.0,(now-_parse(last["observed_at"])).total_seconds()/60)
+        estimated_tokens_left=int(min(
+            bucket_capacity,
+            observed_tokens_left+elapsed_minutes*capacity,
+        ))
     average=requirements["average_required_tokens_per_min"]
     peak=requirements["peak_required_tokens_per_min"]
     avg_shortage=max(0.0,average-capacity) if average is not None and capacity is not None else None
-    peak_shortage=max(0.0,peak-capacity) if peak is not None and capacity is not None else None
-    if last is None or last["tokens_left"] is None or capacity is None:
+    peak_shortage=max(0.0,peak-bucket_capacity) if peak is not None and bucket_capacity is not None else None
+    if estimated_tokens_left is None:
         status="UNKNOWN"
-    elif last["tokens_left"] <= 0:
+    elif estimated_tokens_left <= 0:
         status="EXHAUSTED"
-    elif last["tokens_left"] <= CRITICAL_TOKENS_LEFT or (avg_shortage is not None and avg_shortage > 0):
+    elif estimated_tokens_left <= CRITICAL_TOKENS_LEFT or (avg_shortage is not None and avg_shortage > 0):
         status="CRITICAL"
-    elif last["tokens_left"] <= LIMITED_TOKENS_LEFT or (peak_shortage is not None and peak_shortage > 0):
+    elif estimated_tokens_left <= LIMITED_TOKENS_LEFT or (peak_shortage is not None and peak_shortage > 0):
         status="LIMITED"
     else:
         status="HEALTHY"
     if average is None or peak is None:
         minimum=comfortable=None
     else:
-        minimum=_round_up_five(max(average*1.2,peak))
-        comfortable=_round_up_five(max(minimum*1.25,peak*1.2))
+        burst_refill=peak/TOKEN_EXPIRY_MINUTES
+        minimum=_round_up_five(max(average*1.2,burst_refill))
+        comfortable=_round_up_five(max(minimum*1.25,average*1.5,burst_refill*1.2))
     return {
         "status":status,
-        "tokens_left":last["tokens_left"] if last else None,
+        "tokens_left":estimated_tokens_left,
+        "observed_tokens_left":observed_tokens_left,
+        "estimated_tokens_left":estimated_tokens_left,
         "refill_rate_tokens_per_min":refill,
+        "token_flow_reduction":reduction,
+        "effective_refill_rate_tokens_per_min":capacity,
         "current_capacity_tokens_per_min":capacity,
+        "bucket_capacity_tokens":bucket_capacity,
         "windows":{"last_1h":_window(db,now,1),"last_24h":_window(db,now,24),"last_7d":_window(db,now,24*7)},
         "required":requirements,
         "shortage":{"average":round(avg_shortage,3) if avg_shortage is not None else None,"peak":round(peak_shortage,3) if peak_shortage is not None else None},
