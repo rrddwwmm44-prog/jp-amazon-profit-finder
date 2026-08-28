@@ -14,7 +14,7 @@ completed:
 - Seller Monitor daily Windows task registered and enabled for 05:15; Virtual Purchase tracking remains at 06:00
 
 tests:
-- 230 unittest cases passed on 2026-08-28
+- 235 unittest cases passed on 2026-08-29 after the Keepa token-bucket correction
 - Keepa Live API was not called during bootstrap audit
 - Initial BASELINE used 5 storefront requests and 50 Keepa tokens; no 429 or exhaustion occurred
 
@@ -28,6 +28,9 @@ important_decisions:
 - Keepa storefront data may be incomplete, delayed, and include ASINs seen within the previous seven days
 - Treat the initial 1,419-ASIN five-Seller run as the formal successful BASELINE; do not repeat it
 - Evaluate short Keepa bursts against the 60-minute token bucket while retaining sustained-rate and exhaustion protections
+- Another program uses Keepa daily from 08:00 through 20:00; schedule future new or redesigned Keepa work for 20:00 through the following 08:00 and do not place it within 08:00-20:00
+- Keep the existing Seller Monitor Daily at 05:15 and Virtual Purchase Tracking at 06:00, preserving their 45-minute interval
+- Apply the overnight Keepa window when adding Sellers, splitting increased Seller volume, adding Virtual Purchase processing, adding Keepa jobs, or redesigning Scheduler timing; do not build a time-window framework yet
 - Do not store API keys, .env contents, real Seller IDs, SQLite data, logs, or CSV contents in STATE or Knowledge
 
 next_action: After the first 05:15 scheduled run, audit only the existing task result, logs, and database
