@@ -20,6 +20,7 @@ from app.providers.keepa import KeepaProduct, KeepaResult
 from app.services.job_lock import JobLock
 from app.seller_monitor.service import SellerMonitorService
 from app.seller_monitor.pipeline import SellerDetectionPipeline
+from app.seller_monitor.daily import SellerMonitorDailyService
 
 def engine_registry():
     registry=EngineRegistry(); registry.register(MarketPriceEngine()); registry.register(AmazonArbitrageEngine()); registry.register(SellerDeclineEngine()); return registry
@@ -52,6 +53,7 @@ def main(argv=None):
     seller_check=sub.add_parser("seller-check"); seller_check.add_argument("seller_id",nargs="?")
     seller_new=sub.add_parser("seller-new"); seller_new.add_argument("--seller-id")
     seller_process=sub.add_parser("seller-process"); seller_process.add_argument("--dry-run",action="store_true")
+    seller_daily=sub.add_parser("seller-monitor-daily"); seller_daily.add_argument("--dry-run",action="store_true")
     a=p.parse_args(argv); settings=Settings.load(); db=Database(settings.db_path)
     if a.cmd=="doctor": return doctor(settings,db)
     if a.cmd=="status": return status(db)
@@ -59,7 +61,7 @@ def main(argv=None):
     if a.cmd.startswith("seller-"):
         db.migrate()
         provider=None
-        if a.cmd=="seller-check" or (a.cmd=="seller-process" and not a.dry_run):
+        if a.cmd=="seller-check" or (a.cmd in {"seller-process","seller-monitor-daily"} and not a.dry_run):
             api_key=os.getenv("KEEPA_API_KEY")
             if not api_key:
                 print("Keepa API key is not configured",file=sys.stderr); return 2
@@ -71,15 +73,29 @@ def main(argv=None):
             elif a.cmd=="seller-set": output=service.set_enabled(a.seller_id,a.state=="on")
             elif a.cmd=="seller-new": output=service.list_new(a.seller_id)
             elif a.cmd=="seller-process":
-                lock=JobLock(settings.job_lock_dir,"seller-process")
+                lock=JobLock(settings.job_lock_dir,"seller-monitor")
                 acquired=lock.acquire()
                 if not acquired.acquired:
                     output={"status":"already_running","job":"seller-process"}
                 else:
                     try: output=SellerDetectionPipeline(settings,db,provider).run(dry_run=a.dry_run).to_dict()
                     finally: lock.release()
-            elif a.seller_id: output=service.check(a.seller_id).to_dict()
-            else: output=service.check_enabled()
+            elif a.cmd=="seller-monitor-daily":
+                lock=JobLock(settings.job_lock_dir,"seller-monitor")
+                acquired=lock.acquire()
+                if not acquired.acquired:
+                    output={"status":"already_running","job":"seller-monitor-daily"}
+                else:
+                    try: output=SellerMonitorDailyService(settings,db,provider).run(dry_run=a.dry_run).to_dict()
+                    finally: lock.release()
+            elif a.cmd=="seller-check":
+                lock=JobLock(settings.job_lock_dir,"seller-monitor")
+                acquired=lock.acquire()
+                if not acquired.acquired:
+                    output={"status":"already_running","job":"seller-check"}
+                else:
+                    try: output=service.check(a.seller_id).to_dict() if a.seller_id else service.check_enabled()
+                    finally: lock.release()
         except ValueError as exc:
             print(str(exc),file=sys.stderr); return 2
         except KeepaTokensExhausted:

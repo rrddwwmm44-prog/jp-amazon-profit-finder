@@ -28,10 +28,12 @@ class SellerCheckResult:
 
 class SellerMonitorService:
     def __init__(self, db: Database, provider: SellerStorefrontProvider | None = None,
-                 budget_builder: Callable = build_keepa_budget):
+                 budget_builder: Callable = build_keepa_budget,
+                 max_sellers_per_run: int | None = None):
         self.db = db
         self.provider = provider
         self.budget_builder = budget_builder
+        self.max_sellers_per_run = max_sellers_per_run
 
     @staticmethod
     def normalize_seller_id(seller_id: str) -> str:
@@ -136,11 +138,20 @@ class SellerMonitorService:
         tokens_left = budget.get("tokens_left")
         if isinstance(tokens_left, int):
             limit = min(limit, max(0, tokens_left // 10))
+        if self.max_sellers_per_run is not None:
+            limit=min(limit,max(0,self.max_sellers_per_run))
         results=[]
+        errors=[]
         for seller in sellers[:limit]:
             try:
+                current=self.budget_builder(self.db,now)
+                if current.get("status") in {"CRITICAL","EXHAUSTED"}:
+                    break
                 results.append(self.check(seller["seller_id"], now=now, enforce_budget=False).to_dict())
             except KeepaTokensExhausted:
+                errors.append({"seller_id":seller["seller_id"],"error_class":"KeepaTokensExhausted"})
                 break
+            except Exception as exc:
+                errors.append({"seller_id":seller["seller_id"],"error_class":type(exc).__name__})
         return {"budget_status": status, "eligible": len(sellers), "planned": limit,
-                "checked": len(results), "results": results}
+                "checked": len(results), "results": results, "errors": errors}

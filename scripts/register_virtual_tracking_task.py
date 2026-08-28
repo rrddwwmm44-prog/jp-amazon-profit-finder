@@ -30,6 +30,8 @@ class TaskPlan:
     log_location: str
     multiple_instances: str = "IgnoreNew"
     start_when_available: bool = True
+    enabled: bool = True
+    description: str = "Track open virtual purchases with Keepa budget and application job lock"
 
 
 def validate_task_name(value: str) -> str:
@@ -62,7 +64,7 @@ def task_xml(plan: TaskPlan, *, now: datetime | None = None) -> str:
     if start<=now: start+=timedelta(days=1)
     namespace="http://schemas.microsoft.com/windows/2004/02/mit/task"
     task=Element("Task",{"version":"1.4","xmlns":namespace})
-    registration=SubElement(task,"RegistrationInfo"); SubElement(registration,"Description").text="Track open virtual purchases with Keepa budget and application job lock"
+    registration=SubElement(task,"RegistrationInfo"); SubElement(registration,"Description").text=plan.description
     triggers=SubElement(task,"Triggers"); calendar=SubElement(triggers,"CalendarTrigger")
     # Task Scheduler interprets StartBoundary as local wall-clock time.
     SubElement(calendar,"StartBoundary").text=start.replace(tzinfo=None).isoformat(timespec="seconds")
@@ -75,7 +77,7 @@ def task_xml(plan: TaskPlan, *, now: datetime | None = None) -> str:
     SubElement(settings,"StopIfGoingOnBatteries").text="false"
     SubElement(settings,"StartWhenAvailable").text="true"
     SubElement(settings,"ExecutionTimeLimit").text="PT0S"
-    SubElement(settings,"Enabled").text="true"
+    SubElement(settings,"Enabled").text="true" if plan.enabled else "false"
     actions=SubElement(task,"Actions",{"Context":"Author"}); execute=SubElement(actions,"Exec")
     SubElement(execute,"Command").text=plan.executable
     SubElement(execute,"Arguments").text=subprocess.list2cmdline(list(plan.arguments))

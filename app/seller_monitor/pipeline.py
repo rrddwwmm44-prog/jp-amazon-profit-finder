@@ -31,6 +31,7 @@ class ProductDetailProvider(Protocol):
 class SellerDetectionProcessResult:
     detection_count: int = 0
     planned_count: int = 0
+    processed_count: int = 0
     signals_created: int = 0
     opportunities_saved: int = 0
     virtual_purchases_created: int = 0
@@ -86,6 +87,7 @@ class SellerDetectionPipeline:
                     result.keepa_tokens+=tokens
                 if keepa.history is None:
                     self._mark(detection["id"],"PROCESSED",now,"missing_keepa_history")
+                    result.processed_count+=1
                     result.skipped+=1
                     continue
                 signals=self._signals(detection,keepa)
@@ -93,6 +95,7 @@ class SellerDetectionPipeline:
                 opportunities=OpportunityAggregator().aggregate(signals)
                 if not opportunities:
                     self._mark(detection["id"],"PROCESSED",now,None)
+                    result.processed_count+=1
                     result.skipped+=1
                     continue
                 opportunity=replace(
@@ -115,6 +118,7 @@ class SellerDetectionPipeline:
                     else:
                         result.skipped+=1
                 self._mark(detection["id"],"PROCESSED",now,None)
+                result.processed_count+=1
             except KeepaTokensExhausted:
                 result.errors+=1
                 self._mark(detection["id"],"FAILED",now,"keepa_tokens_exhausted")
