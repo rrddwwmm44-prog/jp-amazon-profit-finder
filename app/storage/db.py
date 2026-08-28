@@ -94,6 +94,9 @@ class Database:
                     json.dumps(signal.evidence,ensure_ascii=False,separators=(",",":")),
                     signal.source_type,signal.source_id,signal.strategy_version,
                 ))
+            c.execute("""UPDATE opportunities SET signal_count=(
+                SELECT COUNT(*) FROM opportunity_signals WHERE opportunity_id=?
+            ) WHERE opportunity_id=?""",(opportunity.opportunity_id,opportunity.opportunity_id))
     def save_virtual_purchase(self,purchase):
         snapshot=json.dumps(asdict(purchase.entry_snapshot),ensure_ascii=False,separators=(",",":"))
         outcome=json.dumps(asdict(purchase.outcome),ensure_ascii=False,separators=(",",":"))
@@ -176,3 +179,6 @@ class Database:
             c.execute("""INSERT OR IGNORE INTO virtual_purchase_tracking_costs(
                 virtual_purchase_id,observed_at,keepa_tokens,api_calls,ai_calls,manual_review_count
             ) VALUES(?,?,?,NULL,NULL,NULL)""",(virtual_purchase_id,observed_at,keepa_tokens))
+    def has_virtual_purchase_for_opportunity(self,opportunity_id):
+        with self.connect() as c:
+            return c.execute("SELECT 1 FROM virtual_purchases WHERE opportunity_id=? LIMIT 1",(opportunity_id,)).fetchone() is not None

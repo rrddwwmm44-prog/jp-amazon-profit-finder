@@ -172,6 +172,12 @@ MIGRATIONS = (
         )""",
         "CREATE INDEX IF NOT EXISTS idx_virtual_purchase_tracking_costs_purchase ON virtual_purchase_tracking_costs(virtual_purchase_id,observed_at)",
     )),
+    Migration(9, "009_seller_detection_processing", (
+        "ALTER TABLE seller_monitor_detections ADD COLUMN processing_status TEXT NOT NULL DEFAULT 'PENDING'",
+        "ALTER TABLE seller_monitor_detections ADD COLUMN processed_at TEXT",
+        "ALTER TABLE seller_monitor_detections ADD COLUMN processing_error TEXT",
+        "CREATE INDEX IF NOT EXISTS idx_seller_monitor_detections_processing ON seller_monitor_detections(processing_status,detected_at,id)",
+    )),
 )
 
 
