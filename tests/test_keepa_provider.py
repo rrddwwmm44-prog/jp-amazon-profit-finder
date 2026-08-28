@@ -15,6 +15,21 @@ ASIN = "B012345678"
 
 
 class KeepaProviderTests(unittest.TestCase):
+    def test_seller_storefront_is_normalized_and_usage_is_recorded(self):
+        class SellerClient:
+            def get_seller_storefront(self, api_key, seller_id, domain_id):
+                self.args=(api_key,seller_id,domain_id)
+                return {"tokensLeft":90,"tokensConsumed":10,"refillRate":5,"sellers":{
+                    seller_id:{"sellerId":seller_id,"sellerName":"Test Seller","asinList":[ASIN,ASIN,"b000000001","invalid"]}}}
+        with tempfile.TemporaryDirectory() as raw:
+            db=Database(Path(raw)/"seller.db"); db.migrate(); client=SellerClient()
+            result=KeepaProvider("test-key",client,db).get_seller_storefront("a12345678901")
+            self.assertEqual(client.args,("test-key","A12345678901",JAPAN_DOMAIN_ID))
+            self.assertEqual(result.asins,("B000000001",ASIN))
+            with db.connect() as connection:
+                usage=connection.execute("SELECT operation,asin,tokens_consumed,status FROM keepa_usage").fetchone()
+            self.assertEqual(tuple(usage),("seller_storefront","A12345678901",10,"success"))
+
     def test_mock_product_is_normalized_for_japan(self):
         result = KeepaProvider("test-key", MockKeepaClient()).get_product(ASIN)
         self.assertEqual((result.product.asin, result.product.domain_id, result.product.marketplace), (ASIN, JAPAN_DOMAIN_ID, "amazon.co.jp"))

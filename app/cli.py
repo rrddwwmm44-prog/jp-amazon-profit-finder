@@ -18,6 +18,7 @@ from app.strategy_performance.service import StrategyPerformanceService
 from app.virtual_purchases.tracking import VirtualPurchaseTrackingService
 from app.providers.keepa import KeepaProduct, KeepaResult
 from app.services.job_lock import JobLock
+from app.seller_monitor.service import SellerMonitorService
 
 def engine_registry():
     registry=EngineRegistry(); registry.register(MarketPriceEngine()); registry.register(AmazonArbitrageEngine()); registry.register(SellerDeclineEngine()); return registry
@@ -44,10 +45,41 @@ def keepa_budget(db):
 def main(argv=None):
     p=argparse.ArgumentParser(description="日本Amazon 利益商品発見システム"); sub=p.add_subparsers(dest="cmd",required=True)
     sub.add_parser("doctor"); r=sub.add_parser("run-all"); r.add_argument("--mode",choices=["mock","live"],default="mock"); one=sub.add_parser("run"); one.add_argument("engine"); one.add_argument("--mode",choices=["mock","live"],default="mock"); sub.add_parser("resume"); sub.add_parser("status"); sub.add_parser("keepa-budget"); keepa_eval=sub.add_parser("keepa-evaluate"); keepa_eval.add_argument("asin"); opportunities=sub.add_parser("opportunities"); opportunities.add_argument("--mode",choices=["mock"],default="mock"); virtual=sub.add_parser("virtual-purchases"); virtual.add_argument("--mode",choices=["mock"],default="mock"); performance=sub.add_parser("strategy-performance"); performance.add_argument("--mode",choices=["mock"],default="mock"); tracking=sub.add_parser("track-virtual-purchases"); tracking.add_argument("--mode",choices=["mock","live"],default="live"); tracking.add_argument("--dry-run",action="store_true")
+    seller_add=sub.add_parser("seller-add"); seller_add.add_argument("seller_id"); seller_add.add_argument("--name"); seller_add.add_argument("--memo")
+    sub.add_parser("seller-list")
+    seller_state=sub.add_parser("seller-set"); seller_state.add_argument("seller_id"); seller_state.add_argument("state",choices=["on","off"])
+    seller_check=sub.add_parser("seller-check"); seller_check.add_argument("seller_id",nargs="?")
+    seller_new=sub.add_parser("seller-new"); seller_new.add_argument("--seller-id")
     a=p.parse_args(argv); settings=Settings.load(); db=Database(settings.db_path)
     if a.cmd=="doctor": return doctor(settings,db)
     if a.cmd=="status": return status(db)
     if a.cmd=="keepa-budget": return keepa_budget(db)
+    if a.cmd.startswith("seller-"):
+        db.migrate()
+        provider=None
+        if a.cmd=="seller-check":
+            api_key=os.getenv("KEEPA_API_KEY")
+            if not api_key:
+                print("Keepa API key is not configured",file=sys.stderr); return 2
+            provider=KeepaProvider(api_key,db=db,cache_ttl_seconds=settings.keepa_cache_ttl_seconds)
+        service=SellerMonitorService(db,provider)
+        try:
+            if a.cmd=="seller-add": output=service.add(a.seller_id,a.name,a.memo)
+            elif a.cmd=="seller-list": output=service.list_sellers()
+            elif a.cmd=="seller-set": output=service.set_enabled(a.seller_id,a.state=="on")
+            elif a.cmd=="seller-new": output=service.list_new(a.seller_id)
+            elif a.seller_id: output=service.check(a.seller_id).to_dict()
+            else: output=service.check_enabled()
+        except ValueError as exc:
+            print(str(exc),file=sys.stderr); return 2
+        except KeepaTokensExhausted:
+            print("Keepa tokens are exhausted",file=sys.stderr); return 3
+        except KeepaHttpError as exc:
+            category="authentication error" if exc.status in {401,403} else "seller not found" if exc.status==404 else "transport error"
+            print(f"Keepa {category}",file=sys.stderr); return 3
+        except KeepaError as exc:
+            print(f"Keepa seller response error: {exc}",file=sys.stderr); return 3
+        print(json.dumps(output,ensure_ascii=False,indent=2)); return 0
     if a.cmd=="opportunities":
         db.migrate(); items=OpportunityAggregator().aggregate(mock_signals(settings))
         for item in items: db.save_opportunity(item)

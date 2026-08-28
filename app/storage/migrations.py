@@ -124,6 +124,32 @@ MIGRATIONS = (
         "ALTER TABLE virtual_purchases ADD COLUMN total_fees REAL",
         "CREATE INDEX IF NOT EXISTS idx_virtual_purchases_fee_model ON virtual_purchases(fee_source, fee_model_version)",
     )),
+    Migration(7, "007_seller_monitor", (
+        """CREATE TABLE IF NOT EXISTS seller_monitors(
+            seller_id TEXT PRIMARY KEY, seller_name TEXT, memo TEXT,
+            enabled INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+            last_checked_at TEXT, current_asin_count INTEGER NOT NULL DEFAULT 0,
+            last_new_count INTEGER NOT NULL DEFAULT 0
+        )""",
+        """CREATE TABLE IF NOT EXISTS seller_monitor_asins(
+            seller_id TEXT NOT NULL, asin TEXT NOT NULL,
+            status TEXT NOT NULL CHECK(status IN ('BASELINE','NEW')),
+            first_seen_at TEXT NOT NULL, last_seen_at TEXT NOT NULL,
+            is_current INTEGER NOT NULL DEFAULT 1,
+            PRIMARY KEY(seller_id, asin),
+            FOREIGN KEY(seller_id) REFERENCES seller_monitors(seller_id)
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_seller_monitor_asins_current ON seller_monitor_asins(seller_id,is_current)",
+        """CREATE TABLE IF NOT EXISTS seller_monitor_detections(
+            id INTEGER PRIMARY KEY, asin TEXT NOT NULL,
+            source_type TEXT NOT NULL DEFAULT 'seller_monitor',
+            seller_id TEXT NOT NULL, detected_at TEXT NOT NULL,
+            UNIQUE(seller_id, asin),
+            FOREIGN KEY(seller_id) REFERENCES seller_monitors(seller_id)
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_seller_monitor_detections_at ON seller_monitor_detections(detected_at DESC)",
+    )),
 )
 
 

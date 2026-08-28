@@ -14,6 +14,7 @@ from app.services.keepa_history import HistoryQuality, NormalizedKeepaHistory, n
 
 
 KEEPA_PRODUCT_URL = "https://api.keepa.com/product"
+KEEPA_SELLER_URL = "https://api.keepa.com/seller"
 JAPAN_DOMAIN_ID = 5
 JAPAN_MARKETPLACE = "amazon.co.jp"
 
@@ -49,6 +50,14 @@ class KeepaResult:
     history: NormalizedKeepaHistory | None = None
 
 
+@dataclass(frozen=True)
+class KeepaSellerResult:
+    seller_id: str
+    seller_name: str | None
+    asins: tuple[str, ...]
+    tokens: KeepaTokenMetadata | None
+
+
 class KeepaError(RuntimeError):
     code = "keepa_error"
 
@@ -70,6 +79,7 @@ class KeepaHttpError(KeepaError):
 
 class KeepaTransport(Protocol):
     def get_product(self, api_key: str, asin: str, domain_id: int) -> dict[str, Any]: ...
+    def get_seller_storefront(self, api_key: str, seller_id: str, domain_id: int) -> dict[str, Any]: ...
 
 
 class KeepaHttpClient:
@@ -82,6 +92,28 @@ class KeepaHttpClient:
         params = urlencode({"key": api_key, "domain": domain_id, "asin": asin, "stats": 1})
         request = Request(
             f"{KEEPA_PRODUCT_URL}?{params}",
+            headers={"Accept": "application/json", "Accept-Encoding": "gzip", "User-Agent": "jp-amazon-profit-finder/0.1"},
+        )
+        try:
+            with urlopen(request, timeout=self.timeout) as response:
+                raw = response.read()
+                if response.headers.get("Content-Encoding", "").lower() == "gzip":
+                    import gzip
+                    raw = gzip.decompress(raw)
+                return json.loads(raw.decode("utf-8"))
+        except HTTPError as exc:
+            try:
+                payload = json.loads(exc.read().decode("utf-8"))
+            except Exception:
+                payload = {}
+            raise KeepaHttpError(exc.code, payload) from None
+        except (URLError, TimeoutError, json.JSONDecodeError):
+            raise KeepaHttpError(None) from None
+
+    def get_seller_storefront(self, api_key: str, seller_id: str, domain_id: int) -> dict[str, Any]:
+        params = urlencode({"key": api_key, "domain": domain_id, "seller": seller_id, "storefront": 1})
+        request = Request(
+            f"{KEEPA_SELLER_URL}?{params}",
             headers={"Accept": "application/json", "Accept-Encoding": "gzip", "User-Agent": "jp-amazon-profit-finder/0.1"},
         )
         try:
@@ -185,6 +217,37 @@ class KeepaProvider:
                 {"product": asdict(product), "history": asdict(history)},
             )
         return KeepaResult(product, tokens, history=history)
+
+    def get_seller_storefront(self, seller_id: str) -> KeepaSellerResult:
+        seller_id = seller_id.strip().upper()
+        if not re.fullmatch(r"[A-Z0-9]{10,20}", seller_id):
+            raise ValueError("invalid Seller ID")
+        observed_at = datetime.now(timezone.utc).isoformat()
+        try:
+            payload = self._client.get_seller_storefront(self._api_key, seller_id, JAPAN_DOMAIN_ID)
+        except KeepaHttpError as exc:
+            tokens = _tokens(exc.payload) if exc.payload else None
+            if self._db is not None:
+                self._db.record_keepa_usage(observed_at, "seller_storefront", seller_id, tokens, "exhausted" if exc.status == 429 else "failed")
+            if exc.status == 429:
+                raise KeepaTokensExhausted(tokens) from None
+            raise
+        tokens = _tokens(payload)
+        sellers = payload.get("sellers")
+        raw = sellers.get(seller_id) if isinstance(sellers, dict) else None
+        status = "failed" if payload.get("error") or not isinstance(raw, dict) else "success"
+        if self._db is not None:
+            self._db.record_keepa_usage(observed_at, "seller_storefront", seller_id, tokens, status)
+        if payload.get("error"):
+            raise KeepaError("Keepa returned an error")
+        if not isinstance(raw, dict):
+            raise KeepaError("Keepa returned no seller")
+        raw_asins = raw.get("asinList") or []
+        if not isinstance(raw_asins, list):
+            raise KeepaError("Keepa seller response is incompatible")
+        asins = tuple(sorted({str(value).strip().upper() for value in raw_asins if re.fullmatch(r"[A-Z0-9]{10}", str(value).strip().upper())}))
+        name = raw.get("sellerName")
+        return KeepaSellerResult(seller_id, name if isinstance(name, str) else None, asins, tokens)
 
 
 def _value(values: Any, index: int) -> int | None:
