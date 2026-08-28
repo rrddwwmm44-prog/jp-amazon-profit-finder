@@ -43,6 +43,9 @@ class OpportunityAggregator:
             status=OpportunityStatus.OPEN, signal_count=len(ordered), signals=ordered,
             reasons=reasons, risks=risks, evidence=tuple(s.evidence for s in ordered),
             summary=_summary(ordered,reasons),
+            source_type=ordered[0].source_type,
+            source_id=ordered[0].source_id,
+            strategy_version=ordered[0].strategy_version,
         )
 
 

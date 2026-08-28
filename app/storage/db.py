@@ -64,30 +64,35 @@ class Database:
             c.execute("""INSERT INTO opportunities(
                 opportunity_id,identity_type,identity_value,asin,jan,product_name,manufacturer,
                 observed_at,opportunity_score,urgency_score,confidence,status,signal_count,
-                summary_json,reasons_json,risks_json,evidence_json
-            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                summary_json,reasons_json,risks_json,evidence_json,source_type,source_id,strategy_version
+            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             ON CONFLICT(opportunity_id) DO UPDATE SET
                 observed_at=excluded.observed_at,opportunity_score=excluded.opportunity_score,
                 urgency_score=excluded.urgency_score,confidence=excluded.confidence,
                 status=excluded.status,signal_count=excluded.signal_count,
                 summary_json=excluded.summary_json,reasons_json=excluded.reasons_json,
-                risks_json=excluded.risks_json,evidence_json=excluded.evidence_json""",(
+                risks_json=excluded.risks_json,evidence_json=excluded.evidence_json,
+                source_type=excluded.source_type,source_id=excluded.source_id,
+                strategy_version=excluded.strategy_version""",(
                 opportunity.opportunity_id,opportunity.identity_type,opportunity.identity_value,
                 opportunity.asin,opportunity.jan,opportunity.product_name,opportunity.manufacturer,
                 opportunity.observed_at,opportunity.opportunity_score,opportunity.urgency_score,
                 opportunity.confidence,opportunity.status.value,opportunity.signal_count,summary,
                 json.dumps(opportunity.reasons,ensure_ascii=False),json.dumps(opportunity.risks,ensure_ascii=False),
                 json.dumps(opportunity.evidence,ensure_ascii=False,separators=(",",":")),
+                opportunity.source_type,opportunity.source_id,opportunity.strategy_version,
             ))
             for signal in opportunity.signals:
                 c.execute("""INSERT OR IGNORE INTO opportunity_signals(
                     opportunity_id,signal_type,source_engine,asin,jan,score,candidate,
                     observed_at,reason,confidence,quality,urgency_hint,evidence_json
-                ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)""",(
+                    ,source_type,source_id,strategy_version
+                ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",(
                     opportunity.opportunity_id,signal.signal_type,signal.source_engine,signal.asin,
                     signal.jan,signal.score,int(signal.candidate),signal.observed_at,signal.reason,
                     signal.confidence,signal.quality,signal.urgency_hint,
                     json.dumps(signal.evidence,ensure_ascii=False,separators=(",",":")),
+                    signal.source_type,signal.source_id,signal.strategy_version,
                 ))
     def save_virtual_purchase(self,purchase):
         snapshot=json.dumps(asdict(purchase.entry_snapshot),ensure_ascii=False,separators=(",",":"))
@@ -100,7 +105,8 @@ class Database:
                 created_at,entry_price,expected_sale_price,expected_profit_yen,expected_roi,
                 opportunity_score,urgency_score,confidence,status,quantity,snapshot_json,outcome_json,summary_json
                 ,fee_source,fee_model_version,referral_fee,fulfillment_fee,total_fees
-            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                ,source_type,source_id,strategy_version,evaluation_rule_version,measurement_window_version
+            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             ON CONFLICT(virtual_purchase_id) DO UPDATE SET
                 status=excluded.status,outcome_json=excluded.outcome_json,summary_json=excluded.summary_json""",(
                 purchase.virtual_purchase_id,purchase.opportunity_id,entry.opportunity_observed_at,
@@ -110,6 +116,8 @@ class Database:
                 purchase.quantity,snapshot,outcome,summary,
                 entry.fee_source,entry.fee_model_version,entry.referral_fee,
                 entry.fulfillment_fee,entry.total_fees,
+                entry.source_type,entry.source_id,entry.strategy_version,
+                entry.evaluation_rule_version,entry.measurement_window_version,
             ))
             for observation in purchase.observations:
                 c.execute("""INSERT OR IGNORE INTO virtual_purchase_observations(
@@ -142,6 +150,11 @@ class Database:
                 snapshot_data.setdefault("fee_source",row["fee_source"])
                 snapshot_data.setdefault("fee_model_version",row["fee_model_version"])
                 snapshot_data.setdefault("fee_calculated_at",row["created_at"])
+                snapshot_data.setdefault("source_type",row["source_type"])
+                snapshot_data.setdefault("source_id",row["source_id"])
+                snapshot_data.setdefault("strategy_version",row["strategy_version"])
+                snapshot_data.setdefault("evaluation_rule_version",row["evaluation_rule_version"])
+                snapshot_data.setdefault("measurement_window_version",row["measurement_window_version"])
                 outcome_data=json.loads(row["outcome_json"])
                 outcome_data["outcome_status"]=VirtualPurchaseStatus(outcome_data["outcome_status"])
                 summary_data=json.loads(row["summary_json"])
@@ -158,3 +171,8 @@ class Database:
                     observations,VirtualPurchaseOutcome(**outcome_data),VirtualPurchaseSummary(**summary_data),
                 ))
         return result
+    def record_virtual_purchase_tracking_cost(self,virtual_purchase_id,observed_at,keepa_tokens):
+        with self.connect() as c:
+            c.execute("""INSERT OR IGNORE INTO virtual_purchase_tracking_costs(
+                virtual_purchase_id,observed_at,keepa_tokens,api_calls,ai_calls,manual_review_count
+            ) VALUES(?,?,?,NULL,NULL,NULL)""",(virtual_purchase_id,observed_at,keepa_tokens))

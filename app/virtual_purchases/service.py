@@ -11,6 +11,10 @@ from app.virtual_purchases.models import (
     EntrySnapshot, FollowUpObservation, VirtualPurchase, VirtualPurchaseEligibility,
     VirtualPurchaseOutcome, VirtualPurchaseStatus, VirtualPurchaseSummary,
 )
+from app.virtual_purchases.comparison import (
+    CURRENT_EVALUATION_RULE_VERSION, CURRENT_MEASUREMENT_WINDOW_VERSION,
+    LEGACY_SOURCE_TYPE, LEGACY_STRATEGY_VERSION, UNKNOWN_SOURCE_ID,
+)
 
 
 class VirtualPurchaseService:
@@ -43,6 +47,10 @@ class VirtualPurchaseService:
             self.fee_model.referral_rate,entry_result.referral_fee,entry_result.fulfillment_fee,
             entry_result.shipping_cost,entry_result.other_cost,entry_result.total_fees,
             entry_result.fee_source.value,entry_result.fee_model_version,entry_result.calculated_at,
+            opportunity.source_type or LEGACY_SOURCE_TYPE,
+            opportunity.source_id or UNKNOWN_SOURCE_ID,
+            opportunity.strategy_version or LEGACY_STRATEGY_VERSION,
+            CURRENT_EVALUATION_RULE_VERSION,CURRENT_MEASUREMENT_WINDOW_VERSION,
         )
         identity=f"{opportunity.opportunity_id}:{opportunity.observed_at}"
         virtual_id=sha256(identity.encode()).hexdigest()[:24]

@@ -127,6 +127,12 @@ class VirtualPurchaseTrackingService:
                     before=len(candidate.purchase.observations)
                     updated=self.virtual_service.evaluate(updated,as_of=now.isoformat())
                     self.db.save_virtual_purchase(updated)
+                    keepa_tokens=0 if keepa.cache_hit else (
+                        keepa.tokens.tokens_consumed if keepa.tokens else None
+                    )
+                    self.db.record_virtual_purchase_tracking_cost(
+                        candidate.purchase.virtual_purchase_id,observation.observed_at,keepa_tokens,
+                    )
                     result.observations_added+=int(len(updated.observations)>before)
                     if updated.status == VirtualPurchaseStatus.WIN: result.wins+=1
                     elif updated.status == VirtualPurchaseStatus.LOSS: result.losses+=1

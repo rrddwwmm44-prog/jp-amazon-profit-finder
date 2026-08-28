@@ -150,6 +150,28 @@ MIGRATIONS = (
         )""",
         "CREATE INDEX IF NOT EXISTS idx_seller_monitor_detections_at ON seller_monitor_detections(detected_at DESC)",
     )),
+    Migration(8, "008_comparison_contract", (
+        "ALTER TABLE opportunities ADD COLUMN source_type TEXT",
+        "ALTER TABLE opportunities ADD COLUMN source_id TEXT",
+        "ALTER TABLE opportunities ADD COLUMN strategy_version TEXT",
+        "ALTER TABLE opportunity_signals ADD COLUMN source_type TEXT",
+        "ALTER TABLE opportunity_signals ADD COLUMN source_id TEXT",
+        "ALTER TABLE opportunity_signals ADD COLUMN strategy_version TEXT",
+        "ALTER TABLE virtual_purchases ADD COLUMN source_type TEXT NOT NULL DEFAULT 'legacy'",
+        "ALTER TABLE virtual_purchases ADD COLUMN source_id TEXT NOT NULL DEFAULT 'unknown'",
+        "ALTER TABLE virtual_purchases ADD COLUMN strategy_version TEXT NOT NULL DEFAULT 'legacy'",
+        "ALTER TABLE virtual_purchases ADD COLUMN evaluation_rule_version TEXT NOT NULL DEFAULT 'vp_eval_v1'",
+        "ALTER TABLE virtual_purchases ADD COLUMN measurement_window_version TEXT NOT NULL DEFAULT 'vp_window_v1'",
+        "CREATE INDEX IF NOT EXISTS idx_virtual_purchases_comparison ON virtual_purchases(source_type,source_id,strategy_version,evaluation_rule_version,measurement_window_version,fee_model_version)",
+        """CREATE TABLE IF NOT EXISTS virtual_purchase_tracking_costs(
+            id INTEGER PRIMARY KEY, virtual_purchase_id TEXT NOT NULL,
+            observed_at TEXT NOT NULL, keepa_tokens INTEGER,
+            api_calls INTEGER, ai_calls INTEGER, manual_review_count INTEGER,
+            UNIQUE(virtual_purchase_id, observed_at),
+            FOREIGN KEY(virtual_purchase_id) REFERENCES virtual_purchases(virtual_purchase_id)
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_virtual_purchase_tracking_costs_purchase ON virtual_purchase_tracking_costs(virtual_purchase_id,observed_at)",
+    )),
 )
 
 

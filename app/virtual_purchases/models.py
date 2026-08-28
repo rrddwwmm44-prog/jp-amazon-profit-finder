@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 
+from app.virtual_purchases.comparison import ComparisonContract
+
 
 class VirtualPurchaseStatus(StrEnum):
     OPEN = "OPEN"
@@ -38,6 +40,19 @@ class EntrySnapshot:
     fee_source: str
     fee_model_version: str
     fee_calculated_at: str
+    source_type: str = "legacy"
+    source_id: str = "unknown"
+    strategy_version: str = "legacy"
+    evaluation_rule_version: str = "vp_eval_v1"
+    measurement_window_version: str = "vp_window_v1"
+
+    @property
+    def comparison_contract(self) -> ComparisonContract:
+        return ComparisonContract(
+            self.source_type,self.source_id,self.strategy_version,
+            self.evaluation_rule_version,self.measurement_window_version,
+            self.fee_model_version,
+        )
 
 
 @dataclass(frozen=True)

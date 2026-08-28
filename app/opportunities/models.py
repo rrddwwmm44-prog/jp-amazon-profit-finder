@@ -25,6 +25,9 @@ class Signal:
     urgency_hint: int | None = None
     product_name: str | None = None
     manufacturer: str | None = None
+    source_type: str | None = None
+    source_id: str | None = None
+    strategy_version: str | None = None
 
 
 @dataclass(frozen=True)
@@ -65,3 +68,6 @@ class Opportunity:
     risks: tuple[str, ...]
     evidence: tuple[dict[str, Any], ...]
     summary: OpportunitySummary
+    source_type: str | None = None
+    source_id: str | None = None
+    strategy_version: str | None = None
