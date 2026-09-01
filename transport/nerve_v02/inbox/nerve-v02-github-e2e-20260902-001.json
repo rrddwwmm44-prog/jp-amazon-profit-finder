@@ -1,0 +1,29 @@
+{
+  "schema_version": "0.2",
+  "task_id": "nerve-v02-github-e2e-20260902-001",
+  "project_id": "seller-monitor",
+  "domain": "ecommerce",
+  "project_path": "C:\\Users\\rrddw\\Documents\\Codex\\2026-08-09\\files-mentioned-by-the-user-amazon\\outputs\\jp-amazon-profit-finder-new",
+  "base_state_version": 3,
+  "objective": "Append exactly one documentation-only validation line to nerve_v02_adapter/README.md. The exact line is: Validated GitHub transport E2E: ChatGPT -> GitHub -> Windows worker -> Dispatcher -> Codex -> Adapter. Do not modify any other file. If the exact line already exists, do not append another copy.",
+  "risk": "LOW",
+  "capabilities": [
+    "read_repo",
+    "write_repo"
+  ],
+  "scope": [
+    "documentation_only",
+    "controlled_github_transport_e2e"
+  ],
+  "allowed_paths": [
+    "nerve_v02_adapter/README.md"
+  ],
+  "acceptance": [
+    "nerve_v02_adapter/README.md contains the exact validation line exactly once",
+    "No file other than nerve_v02_adapter/README.md is changed by Codex",
+    "No tests are requested or run"
+  ],
+  "executor": "codex",
+  "approval_id": null,
+  "execution_authorized": true
+}
